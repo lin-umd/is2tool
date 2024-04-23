@@ -1,0 +1,15 @@
+numpy>=1.19.4
+pandas>=1.1.4
+shapely>=1.7.1
+geopandas>=0.10.2
+h3pandas>=0.2.1
+dask>=2022.1.1
+dask_geopandas>=0.1.0a6
+pyarrow>=4.0.0
+h5py>=3.1.0
+psycopg2>=2.8.6
+xarray>=0.19.0
+rioxarray>=0.6.1
+geocube>=0.1.2
+tabulate>=0.9.0
+psycopg2-binary>=2.9.1

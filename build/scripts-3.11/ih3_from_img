@@ -1,0 +1,296 @@
+#!python
+import argparse, os, sys, dask, re, glob, warnings, logging, h3
+os.environ['USE_PYGEOS'] = '0'
+import numpy as np
+import pandas as pd
+import geopandas as gpd
+import xarray as xr #   include labels? fast array, indexing,
+import rioxarray # geospatial extension + xarray
+import h3pandas # h3
+import dask_geopandas
+from shapely.geometry import box
+from scipy import ndimage # mathematics, science, and engineering.
+from dask.distributed import Client, progress
+
+#import easegridindex as egi
+import gedih3 as gh3 # gh3 code
+
+# IN_DIR = '/gpfs/data1/vclgp/decontot/data/raster/esa_land_cover/'
+# OUT_DIR='/gpfs/data1/vclgp/data/iss_gedi/h3/ancillary'
+
+
+
+
+def getCmdArgs():
+    p = argparse.ArgumentParser(description = "Incorporate information from image data to GEDI shots")
+    
+    p.add_argument("-o", "--output", dest="output", required=True, type=str, help="output directory or file path")
+    p.add_argument("-i", "--img", dest="img", required=True, type=str, default=None, help="path to raster file or directory with tiles to incorporate.")
+    p.add_argument("-f", "--format", dest="format", required=False, type=str, default='tif', help="image format to look for [default = tif]")
+    p.add_argument("-b", "--band_names", dest="band_names", required=False, type=str, nargs='+', default=None, help="(optional) band names to use in output")
+    p.add_argument("-w", "--window_operations", dest="window_operations", required=False, type=str, nargs='+', default=None, help="(optional) moving window operations to apply to image bands: list of 3 integer numbers representing band number (0 indexed), window size (1-9 pixels) and operation id (0 = sum, 1 = mean, 2 = median, 3 = mode), respectively; e.g. -w 033 151 152"),
+    p.add_argument("-y", "--quality", dest="quality", required=False, action='store_true', help="apply latest quality filter recipe")    
+    p.add_argument("-e", "--egi", dest="egi", required=False, action='store_true', help="export shots with EGI spatial index (exact pixels) instead of H3 (approximate hexagons) - much slower!")
+    p.add_argument("-m", "--merge", dest="merge", required=False, action='store_true', help="merge outputs and export to single file")
+    p.add_argument("-g", "--geo", dest="geo", required=False, action='store_true', help="export file as georreferenced points [.gpkg]")
+
+    p.add_argument("-l", "--fillna", dest="fillna", required=False, type=float, default=None, help="value to replace NAs in the input images")
+    p.add_argument("-d", "--dropna", dest="dropna", required=False, action='store_true', help="drop NAs before exporting")
+    p.add_argument("-r", "--resume", dest="resume", required=False, action='store_true', help="check for files in the output directory and ignore processing for existing files")
+
+    n = os.cpu_count() // 4
+    p.add_argument("-n", "--cores", dest="cores", required=False, type=int, default=n, help=f"number of cpu cores to use [default = {n}]")
+    p.add_argument("-s", "--threads", dest="threads", required=False, type=int, default=1, help="number of threads per cpu [default = 1]")
+    p.add_argument("-A", "--ram", dest="ram", required=False, type=int, default=20, help="maximum RAM usage per cpu - in Giga Bytes [default = 20]")
+    p.add_argument("-p", "--port", dest="port", required=False, type=int, default=10000, help="port where to open dask dashboard [default = 10000]")
+    
+    cmdargs = p.parse_args()
+    return cmdargs
+
+
+def get_img_tile(img_path): # return tile boundary
+    with rioxarray.open_rasterio(img_path) as img:
+        return box(*img.rio.bounds())
+
+@dask.delayed
+def wait_tile(img_path): # add delay to read image tiles.
+    return get_img_tile(img_path) 
+
+def load_img_tiles(dir_path, file_format='tif'):    
+    
+    if os.path.isfile(dir_path):
+        img_paths = [dir_path]
+    else:    
+        img_paths = glob.glob(os.path.join(dir_path, '*.' + file_format))
+    
+    fimgs = [wait_tile(i) for i in img_paths]# read all tiles one time
+    fimgs = dask.compute(*fimgs, traverse=False) # get all bounding box.
+
+    with rioxarray.open_rasterio(img_paths[0]) as img:
+        crs = img.rio.crs# get crs of image tile.
+    # rdf = all image tiles' geometry
+    # index = image tile name.
+    rdf = gpd.GeoDataFrame({'file':img_paths}, geometry=gpd.GeoSeries(fimgs), crs=crs)
+    rdf.index = [os.path.basename(i).split('.')[0] for i in img_paths]
+    return rdf
+
+## -- window functions
+def window_sum(band=0):
+    def _sum(x, w, b=band):
+        band = x[b].copy()
+        kernel = np.ones((w,w))
+        band.data = ndimage.convolve(band, kernel, mode='constant', cval=0)
+        return band
+    return _sum
+
+def window_mean(band=0):
+    def _mean(x, w, b=band):
+        band = x[b].copy()
+        kernel = np.ones((w,w)) / (w*w)
+        band.data = ndimage.convolve(band, kernel, mode='nearest')
+        return band
+    return _mean
+
+def window_median(band=0):
+    def _median(x, w, b=band):
+        band = x[b].copy()
+        band.data = ndimage.percentile_filter(band, .5, size=(w,w), mode='nearest')
+        return band
+    return _median
+
+def window_mode(band=0):    
+    def _mode(x, w, b=band):
+        band = x[b].copy()
+        kernel = np.ones((w,w))
+        
+        if 'int' not in str(band.dtype):
+            band = band.astype(int)
+        
+        uvals = np.unique(band.data)
+        b_list = [ndimage.convolve((band == u).astype('byte'), kernel, mode='constant', cval=0) for u in uvals]
+        
+        zband = band.data
+        zband[:] = uvals[0]
+        
+        b0 = b_list[0]
+        for i in range(1,len(b_list)):
+            bi = b_list[i]
+            zband[bi > b0] = uvals[i]
+            b0[bi > b0] = bi[bi > b0]            
+        
+        band.data = zband
+        return band
+    return _mode
+
+def get_window_func(band=0, size=3, fid=0):
+    wfun = None
+    if fid == 0:
+        wfun = lambda x: window_sum(band)(x, size)
+        wfun.__name__ = f'b{band}_sum_{size}x{size}'
+    elif fid == 1:
+        wfun = lambda x: window_mean(band)(x, size)
+        wfun.__name__ = f'b{band}_mean_{size}x{size}'
+    elif fid == 2:
+        wfun = lambda x: window_median(band)(x, size)
+        wfun.__name__ = f'b{band}_median_{size}x{size}'
+    elif fid == 3:
+        wfun = lambda x: window_mode(band)(x, size)
+        wfun.__name__ = f'b{band}_mode_{size}x{size}'
+    return wfun
+    
+## -- 
+
+def pixels_to_points(df, rdf, window_funcs=[], geo=False, band_names=None, fill_nas=None, drop_nas=False, struct=None):       
+    odf = gpd.GeoDataFrame(df, geometry=gpd.points_from_xy(df['land_segments/longitude'], df['land_segments/latitude']), crs=4326)
+    odf = odf.reset_index().overlay(rdf.to_crs(odf.crs)).set_index('file')
+    tiles = odf.index.unique()
+
+    fdf = []
+    for t in tiles:
+        ras = rioxarray.open_rasterio(t)
+        
+        if fill_nas is not None:
+            ras = ras.fillna(fill_nas)
+        
+        tdf = odf.loc[[t]].set_index('h3_12').to_crs(ras.rio.crs)
+        
+        if len(tdf) == 0:
+            ras.close()
+            continue
+        
+        tgt_x = xr.DataArray(tdf.geometry.x, dims="points")
+        tgt_y = xr.DataArray(tdf.geometry.y, dims="points")
+        pts = ras.sel(x=tgt_x, y=tgt_y, method='nearest', drop=False)
+        
+        full_names = [f"b{i}" for i in range(ras.shape[0])]
+        if hasattr(ras, 'long_name'):
+            full_names = [ras.long_name] if type(ras.long_name) == str else list(ras.long_name)
+        
+        if band_names is None:
+            band_names = full_names
+        
+        ras_df = pts.to_dataframe(name='var')
+        for i,b in enumerate(ras_df.index.get_level_values(0).unique()):
+            tdf[ band_names[i] ] = ras_df.loc[b]['var'].to_numpy()
+       
+        dst = np.array([(ras_df.loc[b].x - tdf.geometry.x).abs() , (ras_df.loc[b].y - tdf.geometry.y).abs()]).mean(axis=0)
+        tdf = tdf.assign(relative_pixel_distance = dst / np.abs(ras.rio.resolution()).mean())
+        
+        keep_cols = ['land_segments/delta_time', 'relative_pixel_distance'] + band_names
+        if geo:
+            # df['land_segments/longitude']
+            tdf = gpd.GeoDataFrame(tdf, geometry=gpd.points_from_xy(tdf['land_segments/longitude'], tdf['land_segments/latitude']), crs=4326)
+            keep_cols.append('geometry')
+        
+        tdf = tdf[keep_cols]
+        
+        ## custom window stats
+        for window_func in window_funcs:
+            if callable(window_func):
+                b = int(re.sub('b(\\d+)_.*','\\1',window_func.__name__))
+                bname = band_names[b]
+                vname = window_func.__name__.replace(f'b{b}_', bname+'_')
+
+                ras_conv = window_func(ras)
+                ras_pts = ras_conv.sel(x=tgt_x, y=tgt_y, method='nearest', drop=True)
+                tdf[vname] = ras_pts.to_dataframe(name='var')['var'].to_numpy()
+
+        if drop_nas:
+            tdf = tdf.dropna()
+            
+        fdf.append(tdf)
+        ras.close()
+
+    if len(fdf) == 0:
+        return struct
+    
+    fdf = pd.concat(fdf)
+    return fdf
+
+def dask_split_procs(df, client, client_kwargs, n=1000):        
+    for i in np.arange(0, df.npartitions, n):
+        print(f"processing {i} to {i+n} of {df.npartitions}")
+        _ = df.partitions[i:(i+n)].persist()
+        progress(_)
+        del _
+        print('## -- reopening client')
+        client.close()
+        client = Client(**client_kwargs)
+
+
+if __name__ == '__main__':
+    args = getCmdArgs()
+           
+    is_greedy = gh3.safe.tell_user(os.cpu_count() // 2, verbose=False)
+    is_greedy = gh3.safe.tell_user(os.cpu_count() // 2) # 2nd time gets cpu percent correctly
+    if is_greedy and not gh3.safe.clear_user(): 
+        print("## -- too many resources used by your current spawned processes - try again once those are finished")
+        sys.exit("## -- EXIT")
+    else:
+        print("## -- user cleared - opening distributed backend")
+
+    client_kwargs = {
+        'n_workers':args.cores, 
+        'threads_per_worker':args.threads, 
+        'dashboard_address':f':{args.port}', 
+        'memory_limit':f'{args.ram}GB', 
+        'silence_logs':logging.ERROR
+    }
+    
+    client = Client(**client_kwargs)
+    print("## -- dask dashboard available at:", client.dashboard_link)
+    
+    print("## -- loading image tiles")
+    rdf = load_img_tiles(args.img, args.format)
+            
+    anci = {"quality_flags":["quality_flag"]} if args.quality else None
+    preq = "quality_flag" if args.quality else None
+    
+    ## -- DEBUG
+    hex_ids=None
+    if args.resume and os.path.isdir(args.output) and not args.egi:
+        ofiles = glob.glob(os.path.join(args.output, '*'))
+        hex_ids = [os.path.basename(i).split('.')[0] for i in ofiles]
+    ## --
+    
+    print("## -- reading distributed data frame")
+    gdf = gh3.load_gedi(atl08=['land_segments/delta_time','land_segments/longitude','land_segments/latitude'], anci=anci, pre_query=preq, square_tiles=args.egi, region=rdf, ignore_parts=hex_ids)    
+    g_meta = gdf.partitions[0].compute()
+    
+    print("## -- scheduling image processing")
+    wfs = []
+    if args.window_operations is not None:
+        wfs = [[int(j) for j in list(i)] for i in args.window_operations]
+        wfs = [get_window_func(*i) for i in wfs]
+    
+    meta = pixels_to_points(g_meta, rdf=rdf, window_funcs=wfs, geo=args.geo, band_names=args.band_names, fill_nas=args.fillna, drop_nas=args.dropna)
+    gdf = gdf.map_partitions(pixels_to_points, rdf=rdf, window_funcs=wfs, geo=args.geo, band_names=args.band_names, fill_nas=args.fillna, drop_nas=args.dropna, struct=meta.head(0), meta=meta)
+    
+    print("## -- loading and exporting data")
+    opath = args.output
+    if args.merge:
+        opath = re.sub('/*$', '', opath)
+        gdf = gdf.persist()
+        progress(gdf)
+        print('')
+
+        gdf = gdf.compute()
+        if args.geo:
+            if not opath.endswith('.gpkg'):
+                opath += '.gpkg'
+            gdf.to_file(opath)
+        else:
+            if not opath.endswith('.parquet'):
+                opath += '.parquet'
+            gdf.to_parquet(opath, engine='pyarrow')
+    else:
+        files = gh3.export_parts(gdf, opath).persist()
+        progress(files)
+        print('')
+
+    try:
+        client.close()
+    except:
+        pass
+    
+    sys.exit("## -- DONE")

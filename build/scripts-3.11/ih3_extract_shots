@@ -1,0 +1,248 @@
+#!python
+import argparse, os, sys, re
+import glob
+os.environ['USE_PYGEOS'] = '0'
+from dask.diagnostics import ProgressBar
+from datetime import datetime
+import pandas as pd
+import geopandas as gpd
+import gedidriver as gdr
+import gedih3 as gh3
+import dask, logging, ast
+import dask_geopandas as dkg
+import dask.dataframe as dd
+from dask.distributed import Client, progress
+from dask import config as cfg
+import shutil
+
+def getCmdArgs():
+    p = argparse.ArgumentParser(description = "Filter and export IS2 ATL08 data using h3")
+    
+    p.add_argument("-o", "--output", dest="output", required=True, type=str, help="output directory or file path")
+    p.add_argument("-r", "--region", dest="region", required=False, type=str, default=None, help="path to vector (.shp, .gpkg, .kml etc.) or raster (.tif) file with region of interest to extract shots from OR iso3 country code (if not, query all land hexs in data)")
+    p.add_argument("-atl08", "--atl08", dest="atl08", nargs='+', type=str, default=None, required=False, help="Icesat-2 atl08 variables to export")
+    p.add_argument("-a", "--anci", dest="anci", type=str, default=None, required=False, help="quoted dictionary of ancillary variables to export - e.g. \"{'glad_forest_loss':['loss','lossyear']}\"")
+    p.add_argument("-t0", "--time_start", dest="time_start", type=str, default=None, required=False, help="start date to filter shots [YYYY-MM-DD]")
+    p.add_argument("-t1", "--time_end", dest="time_end", type=str, default=None, required=False, help="end date to filter shots [YYYY-MM-DD]")
+    p.add_argument("-q", "--query", dest="query", required=False, type=str, default=None, help="single string with custom filters upon listed variables - use pandas.DataFrame.query notation") 
+    p.add_argument("-q_20m", "--query_20m", dest="query_20m", required=False, type=str, default=None, help="use only for 20m segment filtering [land_segments/canopy/h_canopy_20m, land_segments/terrain/h_te_best_fit_20m]")
+    p.add_argument("-b", "--strong_beam", dest="strong_beam", required=False, action='store_true', help="select only strong beams")
+    p.add_argument("-m", "--merge", dest="merge", required=False, action='store_true', help="merge outputs and export to single file")
+    p.add_argument("-g", "--geo", dest="geo", required=False, action='store_true', help="export file as georreferenced points")
+    p.add_argument("-f", "--format", dest="format", required=False, type=str, default='parquet', help="output files format [default = parquet]")
+    p.add_argument("-n", "--cores", dest="cores", required=False, type=int, default= 5, help=f"number of cpu cores to use [default = 5]")
+    p.add_argument("-s", "--threads", dest="threads", required=False, type=int, default=1, help="number of threads per cpu [default = 1]")
+    p.add_argument("-A", "--ram", dest="ram", required=False, type=int, default=20, help="maximum RAM usage per cpu - in Giga Bytes [default = 20]")
+    p.add_argument("-p", "--port", dest="port", required=False, type=int, default=34999, help="port where to open dask dashboard [default = 34999]")
+    cmdargs = p.parse_args()
+    return cmdargs
+
+
+if __name__ == '__main__':
+    
+    args = getCmdArgs()
+    is_greedy = gh3.safe.tell_user(os.cpu_count() // 2, verbose=False)
+    is_greedy = gh3.safe.tell_user(os.cpu_count() // 2) # 2nd time gets cpu percent correctly
+    if is_greedy and not gh3.safe.clear_user(): 
+        print("## -- too many resources used by your current spawned processes - try again once those are finished")
+        sys.exit("## -- EXIT")
+    else:
+        print("## -- user cleared - opening distributed backend")
+    
+    client = Client(n_workers=args.cores, threads_per_worker=args.threads, dashboard_address=f':{args.port}', memory_limit=f'{args.ram}GB', silence_logs=logging.ERROR, timeout=600)
+    print("## -- dask dashboard available at:", client.dashboard_link)
+
+    anci = None if args.anci is None else ast.literal_eval(args.anci)
+    preq = args.query
+    reg = None
+           
+    if args.region is not None:
+        print("## -- loading region of interest")
+        if not os.path.isfile(args.region): ### not a file 
+            try:
+                countries = gdr.execute_query(f"select iso3, geometry as geom from fia.countries where iso3 = '{ args.region.upper() }'", True)
+                if len(countries) > 0:
+                    reg = countries
+                else:
+                    sys.exit(f"## -- file not found: {args.region}")
+            except:
+                sys.exit("## -- no access to the postgres database")
+        elif args.region.lower().endswith('parquet') or args.region.lower().endswith('pq') or args.region.lower().endswith('parq'):
+            reg = gpd.read_parquet(args.region)
+        elif args.region.lower().endswith('kml'):
+            import fiona
+            fiona.drvsupport.supported_drivers['KML'] = 'rw'
+            reg = gpd.read_file(args.region, driver='KML')
+        elif args.region.lower().endswith('tif'):
+            import rioxarray
+            from shapely.geometry import box
+            with rioxarray.open_rasterio(args.region) as img:
+                reg = gpd.GeoSeries([box(*img.rio.bounds())], crs=img.rio.crs)                        
+        else:
+            reg = gpd.read_file(args.region) 
+    
+    has_20m = False
+
+    if args.atl08: 
+            for item in args.atl08:
+                
+                if item.endswith('_20m'):
+                    has_20m = True
+                    args.atl08 += [item + '_000', item + '_001', item + '_002', item + '_003', item + '_004'] 
+
+            if has_20m: 
+ 
+               args.atl08 += ['h3_12_20m_000', 'h3_12_20m_001', 'h3_12_20m_002', 'h3_12_20m_003', 'h3_12_20m_004']
+     
+    else:
+        print("Error! Please include ATL08 product!")
+        sys.exit(1)
+    
+    
+    if args.geo:
+        # regular 100m segment
+        if 'land_segments/latitude' not in args.atl08: ## exact match
+                    args.atl08 += ['land_segments/latitude']
+        if 'land_segments/longitude' not in args.atl08:
+                    args.atl08 += ['land_segments/longitude']
+            
+        if  has_20m:
+            ## add lat_20m, lon_20m
+            args.atl08 += ['land_segments/latitude_20m_000','land_segments/latitude_20m_001','land_segments/latitude_20m_002','land_segments/latitude_20m_003','land_segments/latitude_20m_004']
+            args.atl08 += ['land_segments/longitude_20m_000','land_segments/longitude_20m_001','land_segments/longitude_20m_002','land_segments/longitude_20m_003','land_segments/longitude_20m_004']
+
+
+    ## now remove '_20m' name
+    for item in args.atl08:
+                if item.endswith('_20m'):
+                     args.atl08.remove(item) #### _20m colunm not exist.
+
+    if args.strong_beam: # if true
+        # add key parameters for strong/weak beam information.
+        if 'orbit_info/sc_orient' not in args.atl08:
+            args.atl08 += ['orbit_info/sc_orient']
+        if 'root_beam' not in args.atl08: 
+            args.atl08 += ['root_beam']
+
+
+    if args.time_start or args.time_end:
+        has_time = False
+
+        tvar = '''`land_segments/delta_time`'''
+        
+        if args.atl08:
+            has_time |= ("land_segments/delta_time" in args.atl08)
+
+        if not has_time:
+            if args.atl08:
+               args.atl08 += ["land_segments/delta_time"]
+
+
+        
+        t_query = None                
+        if args.time_start:
+            t0 = datetime.strptime(args.time_start, '%Y-%m-%d').timestamp() - gdr.START_DATE.timestamp()
+            t_query = f"{tvar} > {t0}"
+        
+        if args.time_end:
+            t1 = datetime.strptime(args.time_end, '%Y-%m-%d').timestamp() - gdr.START_DATE.timestamp()
+            if t_query:
+                t_query += f" and {tvar} < {t1}"
+            else:
+                t_query = f"{tvar} < {t1}"        
+            
+        if preq is None:
+            preq = t_query
+        else:
+            preq += ' and ' + t_query
+
+    
+    print("## -- reading distributed data frame")
+
+    # remove duplicate vars. 
+    # args.atl08 = list(set(args.atl08))
+
+    gdf = gh3.load_gedi(atl08=args.atl08, atl03=None, anci=anci, square_tiles=False, region=reg)
+
+
+        
+    if preq is not None:
+        print("## -- applying data filters")
+        #print(preq)
+        #preq = "`land_segments/canopy/h_canopy` >= 140 and `land_segments/canopy/h_canopy` < 200"
+        gdf = gdf.query(preq)
+    if args.strong_beam: # if true
+        print('## -- select strong beams')
+        gdf = gdf[((gdf['root_beam'].isin(['gt1r', 'gt2r', 'gt3r'])) & (gdf['orbit_info/sc_orient'] == 1)) | \
+                 ((gdf['root_beam'].isin(['gt1l', 'gt2l', 'gt3l'])) & (gdf['orbit_info/sc_orient'] == 0))]
+                
+    if args.geo:
+        print("## -- scheduling georreferencing")
+        ## case 1: land_segments/canopy/h_canopy
+        ## case 2: land_segments/canopy/h_canopy_20m_000 
+        ## case 3: both are not allowed. 
+        
+        # let us use 100 m segemnt lat and lon first.
+        #gdf = gdf.assign(geometry = dkg.points_from_xy(gdf, x='land_segments/longitude', y='land_segments/latitude', crs=4326))
+        # if has_20m:
+        #     gdf = dkg.from_dask_dataframe(
+        #     gdf, geometry=dkg.points_from_xy(gdf, 'land_segments/longitude_20m', 'land_segments/latitude_20m', crs=4326),
+        #     ) 
+
+        # else:
+        gdf = dkg.from_dask_dataframe(
+                gdf, geometry=dkg.points_from_xy(gdf, 'land_segments/longitude', 'land_segments/latitude', crs=4326),
+                )
+        # Set the CRS   ## modify 06/26/2023 --Lin 
+        gdf = gdf.set_crs('epsg:4326')
+        #gdf = gdf.dropna() ## remove NA rows.
+        print('## -- gdf crs: ', gdf.crs)
+        
+        if reg is not None:
+            #print(gdf.compute())
+
+            gdf = gdf.clip(reg.to_crs(4326)) ## clip based on lat, lon, no need for idex.
+    
+    print("## -- loading and exporting data")
+    opath = args.output
+    # export files first, then merge. 
+    
+    files = gh3.export_parts(gdf, opath, fmt=args.format).persist() # i do not need intermediate result .
+    progress(files)  ## show the progress of files writing
+    print('')
+    
+    #### if it contains 20 m product
+    if has_20m:
+        print('## -- merge 20m products [000-004] and apply 20m filter')
+        files_list = glob.glob(opath + "/*.parquet")
+        # merge_20m(file_path=None, q_20m = None, geo = False):
+        cmds = [gh3.merge_20m(file_path=f, q_20m = args.query_20m, geo = args.geo) for f in files_list]
+        _ = dask.persist(*cmds) # cannot use client.persist. 
+        progress(_) 
+        del _
+        print('') 
+    
+    if args.merge: # merge all parquet files.  # /path/filename
+        print('## -- output to a single file')
+        opath = re.sub('/*$', '', opath) ## remove last '/'
+        bs = os.path.basename(opath) # filename
+        # dd, dkg
+        files_list = glob.glob(opath + "/*.parquet")
+        if args.geo:
+            ddf_res = dkg.read_parquet(files_list)
+        else:
+            ddf_res = dd.read_parquet(files_list)
+        ddf_res = ddf_res.repartition(npartitions=1) # for single file export 
+
+        if not opath.endswith(f'.{args.format}'):
+            bs += f'.{args.format}'
+        # out path 
+        out_path = os.path.dirname(opath) # /path
+        name_function = lambda x: bs # file name 
+        ddf_res.to_parquet(out_path, name_function=name_function)
+        # Remove the entire folder and its contents
+        # hold it first. 
+        # shutil.rmtree(opath)
+
+    client.close()
+    sys.exit("## -- DONE")

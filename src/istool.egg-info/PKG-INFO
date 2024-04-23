@@ -1,0 +1,25 @@
+Metadata-Version: 2.1
+Name: istool
+Version: 1.0.0
+Summary: read   icesat-2 h3 database
+Author: Lin, Tiago
+Author-email: lxiong@umd.edu
+Requires-Python: >=3.6
+Description-Content-Type: text/markdown
+Requires-Dist: numpy>=1.19.4
+Requires-Dist: pandas>=1.1.4
+Requires-Dist: shapely>=1.7.1
+Requires-Dist: geopandas>=0.10.2
+Requires-Dist: h3pandas>=0.2.1
+Requires-Dist: dask>=2022.1.1
+Requires-Dist: dask_geopandas>=0.1.0a6
+Requires-Dist: pyarrow>=4.0.0
+Requires-Dist: h5py>=3.1.0
+Requires-Dist: psycopg2>=2.8.6
+Requires-Dist: xarray>=0.19.0
+Requires-Dist: rioxarray>=0.6.1
+Requires-Dist: geocube>=0.1.2
+Requires-Dist: tabulate>=0.9.0
+Requires-Dist: psycopg2-binary>=2.9.1
+
+this is is2 tool
