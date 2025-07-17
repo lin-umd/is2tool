@@ -13,7 +13,7 @@ from scipy import ndimage # mathematics, science, and engineering.
 from dask.distributed import Client, progress
 
 #import easegridindex as egi
-import gedih3 as gh3 # gh3 code
+import icesatih3 as gh3 # gh3 code
 
 # IN_DIR = '/gpfs/data1/vclgp/decontot/data/raster/esa_land_cover/'
 # OUT_DIR='/gpfs/data1/vclgp/data/iss_gedi/h3/ancillary'
@@ -24,7 +24,7 @@ ROOT_PATH='/gpfs/data1/vclgp/xiongl/IS2global/data/h3/atl08/shots_hex'
 
 
 def getCmdArgs():
-    p = argparse.ArgumentParser(description = "Incorporate information from image data to GEDI shots")
+    p = argparse.ArgumentParser(description = "Incorporate information from image data to is2 shots")
     
     p.add_argument("-o", "--output", dest="output", required=True, type=str, help="output directory or file path")
     p.add_argument("-i", "--img", dest="img", required=True, type=str, default=None, help="path to raster file or directory with tiles to incorporate.")
@@ -44,7 +44,7 @@ def getCmdArgs():
     p.add_argument("-n", "--cores", dest="cores", required=False, type=int, default=n, help=f"number of cpu cores to use [default = {n}]")
     p.add_argument("-s", "--threads", dest="threads", required=False, type=int, default=1, help="number of threads per cpu [default = 1]")
     p.add_argument("-A", "--ram", dest="ram", required=False, type=int, default=20, help="maximum RAM usage per cpu - in Giga Bytes [default = 20]")
-    p.add_argument("-p", "--port", dest="port", required=False, type=int, default=10000, help="port where to open dask dashboard [default = 10000]")
+    p.add_argument("-p", "--port", dest="port", required=False, type=int, default=30000, help="port where to open dask dashboard [default = 30000]")
     
     cmdargs = p.parse_args()
     return cmdargs
@@ -264,8 +264,8 @@ if __name__ == '__main__':
     preq = "quality_flag" if args.quality else None
     
     print("## -- reading distributed data frame")
-    # delay function h3_load_cell used in load gedi
-    gdf = gh3.load_gedi(atl08=['land_segments/delta_time','land_segments/longitude','land_segments/latitude'], anci=anci, pre_query=preq, square_tiles=args.egi, region=rdf, ignore_parts=hex_ids)    
+    # delay function h3_load_cell used in load is2
+    gdf = gh3.load_is2(atl08=['land_segments/delta_time','land_segments/longitude','land_segments/latitude'], anci=anci, pre_query=preq, square_tiles=args.egi, region=rdf, ignore_parts=hex_ids)    
     g_meta = gdf.partitions[0].compute()
     
     print("## -- scheduling image processing")

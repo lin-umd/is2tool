@@ -2,10 +2,10 @@
 import argparse
 
 def getCmdArgs():
-    p = argparse.ArgumentParser(description = "List variables available in the GEDI H3 database")
+    p = argparse.ArgumentParser(description = "List variables available in the icesat H3 database")
     p.add_argument("-a", "--ancillary", dest="ancillary", required=False, action='store_true', help="include variables from ancillary database")
     p.add_argument("-g", "--grep", dest="grep", required=False, type=str, default=None, help="match substring")   
-    p.add_argument("-p", "--products", dest="products", required=False, type=str, nargs='+',  default=None, help="search only specified ICESat-2 [alt08]")
+    p.add_argument("-p", "--products", dest="products", required=False, type=str, nargs='+',  default=None, help="search only specified ICESat-2 [atl08]")
     cmdargs = p.parse_args()
     return cmdargs
 
@@ -14,9 +14,9 @@ if __name__ == '__main__':
     args = getCmdArgs()
     
     import pandas as pd
-    from gedih3 import list_gedi_variables, list_anci_variables
+    from icesath3 import list_gedi_variables, list_anci_variables
 
-    vars = list_gedi_variables(args.grep)
+    vars = list_icesat_variables(args.grep)
     
     if args.ancillary:
         anci = list_anci_variables(args.grep)

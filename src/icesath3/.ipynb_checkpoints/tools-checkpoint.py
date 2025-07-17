@@ -20,11 +20,7 @@ import shutil
 
 #import easegridindex as egi  #### package folder ... 
 
-ROOT_PATH='/gpfs/data1/vclgp/data/iss_gedi/h3/'
-
 ROOT_PATH='/gpfs/data1/vclgp/xiongl/IS2global/data/h3/'
-
-BAD_ORBITS=os.path.join(ROOT_PATH, 'api', 'issgedi_l4b_excluded_granules_r002_20230315a_plusManual.json')
 
 
 EASE_XY_RES = (1000.895023349556141, -1000.895023349562052)
@@ -51,9 +47,9 @@ def read_geopackage_schema(path):
     schema = pd.DataFrame([{'column':i, 'dtype':j} for i,j in gpkg_file.schema.get('properties').items()])
     return schema
 
-def list_gedi_variables(keyword=None):
+def list_icesat_variables(keyword=None):
     """
-    returns a dictionary of all columns available in the gedi-h3 files 
+    returns a dictionary of all columns available in the icesat-h3 files 
     """
     #prods = ['l2a','l2b','l4a'] ### right now only atl08
     prods = ['atl08']
@@ -111,7 +107,7 @@ def h3_aoi(region=None):
     """
     region: geopandas.GeoDataFrame with boundaries from the area of interest
     
-    returns h3 cells at resolution level 3 covered in the GEDI database
+    returns h3 cells at resolution level 3 covered in the icesat database
     """
     atl08 = ROOT_PATH + 'atl08/shots_hex/'
     files = glob.glob(atl08 + '*.parquet')
@@ -165,16 +161,16 @@ def h3_load_cell(h3_03, atl03=None, atl08=None, anci=None, pre_query=None):
     return df
 
 
-#### i need to change this 
 
-def load_gedi(atl03=None, atl08=None, anci=None, region=None, square_tiles=False, pre_query=None, ignore_parts=None):
+
+def load_is2(atl03=None, atl08=None, anci=None, region=None, pre_query=None, ignore_parts=None):
     """
     atl03: tl03 columns to load
     atl08: atl08 columns to load
     region: geopandas.GeoDataFrame with boundaries from the area of interest
-    square_tiles: load partitions as square tiles instead of hexagons
+
     
-    returns a dask.DataFrame of all GEDI shots within the region (if any)
+    returns a dask.DataFrame of all icesat shots within the region (if any)
     """
     loc = {i:j for i,j in locals().items() if i in ['atl03','atl08'] and j is not None}
     
@@ -186,30 +182,13 @@ def load_gedi(atl03=None, atl08=None, anci=None, region=None, square_tiles=False
 
     if ignore_parts is not None:
         aoi = aoi[~aoi.index.isin(ignore_parts)]
-    # 13527 cells at global
-    # if len(aoi) > 7000:
-    #     user_input = input("Enter 'y' for first 7k h3 cells or 'n' for rest: ")
-    #     if user_input == 'y':
-    #         aoi = aoi[:7000] # index 0 - 6999
-    #     elif user_input == 'n':
-    #         aoi = aoi[7000:] # index 7001
-    #     else:
-    #         sys.exit('## -- error of input')
-            
-    # 20240229
+
     if len(aoi) == 0: 
         print('## -- no hex in roi!')
     print('## -- length of h3 cells ', len(aoi))
-    if square_tiles:
-        toi = egi.aoi_tiles(region)
-        aoi = aoi.to_crs(toi.crs)
-        th3 = toi.geometry.apply(lambda x: aoi.index[aoi.intersects(x)].to_list())
-        l = th3.apply(len) 
-        dfs = [egi_load_tile(i, j, atl03, atl08, anci, pre_query) for i,j in th3[l > 0].reset_index().to_numpy()]
-    else:
-        # skip not exsit cell 
-        dfs=[]
-        dfs = [h3_load_cell(i, atl03, atl08, anci, pre_query) for i in aoi.index]
+
+    dfs=[]
+    dfs = [h3_load_cell(i, atl03, atl08, anci, pre_query) for i in aoi.index]
         
     
     return ddf.from_delayed(dfs)
@@ -240,7 +219,7 @@ def h3_parent(df, level, keep_child=False):
 
 def h3_aggregate(df, level, agg='mean', return_geometry=True, centroids=False, n_meta=10, nparts=1):
     """
-    df: dask.DataFrame with h3-indexed GEDI data
+    df: dask.DataFrame with h3-indexed icesat data
     level: h3 resolution level to aggregate into
     agg: aggregation mapping in any format accepeted by pandas.DataFrame.groupby
     return_geometry: generate geometry for each h3 hexagon?
@@ -377,7 +356,7 @@ def export_parts(df, out_dir, fmt=None):
         elif fmt == 'csv':
             xdf.to_csv(out_path)
         elif fmt == 'h5' or fmt == 'hdf5':
-            xdf.to_hdf(out_path, key='GEDI', mode='w')
+            xdf.to_hdf(out_path, key='icesat', mode='w')
         else:
             xdf.to_parquet(out_path) 
         return out_path                    
@@ -464,12 +443,6 @@ def load_anci(gdf, mapper={'quality_flags': ['quality_flag']}, merge_how='inner'
     gdf = gdf.map_partitions(get_anci_file, mapper=mapper, merge_how=merge_how, header=meta.head(0), meta=meta)
     return gdf
 
-## -- post filtering methods
-
-def list_bad_orbits(bad_orbs_path = BAD_ORBITS):
-    with open(bad_orbs_path) as f:
-        borbs = json.load(f)
-        return borbs
 
 def get_tile_id(x, y, tilesize=72):
     ease2_binsize = EASE_XY_RES[0]*tilesize, -EASE_XY_RES[1]*tilesize
@@ -480,118 +453,19 @@ def get_tile_id(x, y, tilesize=72):
     
     return tile_id
 
-def filter_bad_orbits(df, header = None):
-    if len(df) == 0:
-        return header
-    borbs = list_bad_orbits()
-    orb_gra = df.set_index('shot_number').root_file.str.extract(r'GEDI.*_O(?P<orbit>\d+)_0(?P<granule>\d)_.*')
-    df = df.merge(orb_gra, left_on='shot_number', right_index=True)
-    df['orbit_granule'] = df.apply(lambda x: int(f"{x.orbit}{x.granule}"), axis=1)
-
-    pts = gpd.points_from_xy(df.lon_lowestmode, df.lat_lowestmode, crs=4326).to_crs(epsg=6933)
-    df['tile_id'] = [get_tile_id(pt.x,pt.y) for pt in pts]
-    
-    def keep_shot(x):
-        tid = x.tile_id.iloc[0]
-        rm_orbs = borbs.get(tid)
-
-        if rm_orbs is None:
-            res = x.set_index('shot_number').orbit_granule.copy()
-            res[:] = True
-            return res
-
-        res = ~x.set_index('shot_number').orbit_granule.isin(rm_orbs)
-        return res
-
-    keep = df.groupby('tile_id').apply(keep_shot)
-    if type(keep) is pd.DataFrame:
-        keep = keep.unstack()
-
-    keep = keep.droplevel('tile_id')
-    keep.name = 'include_granule_flag'
-
-    df = df.merge(keep, left_on='shot_number', right_index=True)
-    return df
-
-def load_gedi_filtered(l2a=None, l2b=None, l4a=None, region=None, square_tiles=False, filter_degraded=True, filter_leaf_off=False, check_orbit_files=True, apply_filter=True, ignore_parts=None):
-    """
-    recipe: https://docs.google.com/presentation/d/1Z05XiaZGEX0cOjGj-mPQoBiMEaHn-bUUa-aIGAnoxiE/edit#slide=id.g146f6ca140a_0_6
-    """
-    
-    l2a_vars  = ['shot_number', 'root_file', 'rx_assess/rx_maxamp', 'rx_assess/sd_corrected', 'geolocation/stale_return_flag', 'selected_algorithm', 'rx_assess/quality_flag', 'degrade_flag', 'surface_flag', 'lon_lowestmode', 'lat_lowestmode']
-    l2a_vars += ['land_cover_data/pft_class','land_cover_data/region_class', 'land_cover_data/leaf_off_flag','land_cover_data/landsat_water_persistence', 'land_cover_data/urban_proportion']
-    l2a_vars += ['geolocation/sensitivity_a1','geolocation/sensitivity_a2','geolocation/sensitivity_a5','geolocation/sensitivity_a10']
-    l2a_vars += ['rx_processing_a1/zcross', 'rx_processing_a2/zcross', 'rx_processing_a5/zcross' ,'rx_processing_a10/zcross']
-    l2a_vars += ['rx_processing_a1/toploc', 'rx_processing_a2/toploc', 'rx_processing_a5/toploc' ,'rx_processing_a10/toploc']
-    l2a_vars += ['rx_processing_a1/rx_algrunflag', 'rx_processing_a2/rx_algrunflag', 'rx_processing_a5/rx_algrunflag' ,'rx_processing_a10/rx_algrunflag']
-    
-    out_cols = []
-    if l4a is not None:
-        out_cols += l4a
-    if l2b is not None:
-        out_cols += l2b
-    if l2a is not None:
-        out_cols += l2a
-        l2a_vars = list(set(l2a_vars + l2a))
-    out_cols = list(set(out_cols))
-    
-    gdf = load_gedi(l2a=l2a_vars, l2b=l2b, l4a=l4a, region=region, square_tiles=square_tiles, ignore_parts=ignore_parts)
-       
-    gdf['zcross'] = 0
-    gdf['toploc'] = 0
-    gdf['rx_algrunflag'] = 0
-    gdf['sensitivity'] = 0
-    
-    for a in [1,2,5,10]:
-        gdf['zcross']        += (gdf['selected_algorithm'] == a) * gdf[f"rx_processing_a{a}/zcross"]
-        gdf['toploc']        += (gdf['selected_algorithm'] == a) * gdf[f"rx_processing_a{a}/toploc"]
-        gdf['rx_algrunflag'] += (gdf['selected_algorithm'] == a) * gdf[f"rx_processing_a{a}/rx_algrunflag"]
-        gdf['sensitivity']   += (gdf['selected_algorithm'] == a) * gdf[f'geolocation/sensitivity_a{a}']
-
-    # algorithm run flag (used to decide if L2B/L4A algorithm are applied to a shot)
-    gdf['algorithm_run_flag'] = (gdf['rx_assess/quality_flag'] == 1) & (gdf['rx_algrunflag'] == 1) & (gdf['zcross'] > 0) & (gdf['toploc'] > 0) & (gdf['sensitivity'] > 0) & (gdf['sensitivity'] < 1)
-    
-    # shots without high degradation of geolocation performance
-    gdf['degrade_include_flag'] = ~(gdf['degrade_flag'] // 10).isin([5,7,8,9]) & ~(gdf['degrade_flag'] % 10).isin([1,2,4,5,6,7,9])
-
-    # tropical forest flag (identify prediction strata with dense tropical forests)
-    gdf['tropics_flag'] = gdf['land_cover_data/region_class'].isin([4,5,6]) & (gdf['land_cover_data/pft_class'] == 2)
-    
-    # land surface waveforms (non-urban). Note: urban/water are set to zero biomass in L4B, but excluded in L2B.
-    gdf['land_surface_flag'] = (gdf['land_cover_data/landsat_water_persistence'] < 10) & (gdf['land_cover_data/urban_proportion'] < 50)
-
-    gdf['quality_flag'] = gdf['algorithm_run_flag'] & gdf['land_surface_flag'] & (gdf['surface_flag'] == 1) & (gdf['geolocation/stale_return_flag'] == 0)
-    gdf['quality_flag'] &= (gdf['rx_assess/rx_maxamp'] > (8 * gdf['rx_assess/sd_corrected']))
-    gdf['quality_flag'] &= (gdf['geolocation/sensitivity_a2'] > .95)
-    gdf['quality_flag'] &= ( ((gdf['geolocation/sensitivity_a2'] > .98) & gdf['tropics_flag']) | ~gdf['tropics_flag'] )
-    
-    if filter_degraded:
-        gdf['quality_flag'] &= gdf['degrade_include_flag']
-    if filter_leaf_off:
-        gdf['quality_flag'] &= (gdf['land_cover_data/leaf_off_flag'] == 0)
-
-    if check_orbit_files:
-        meta = filter_bad_orbits(gdf.head())
-        gdf = gdf.map_partitions(filter_bad_orbits, header = meta.head(0), meta = meta)
-        gdf["quality_flag"] &= (gdf['include_granule_flag'])
-    
-    if apply_filter:
-        gdf = gdf.query("quality_flag")
-    else:
-        out_cols += ['algorithm_run_flag','degrade_include_flag','tropics_flag','land_surface_flag','include_granule_flag','quality_flag']
-
-    return gdf[out_cols]
 
 
 
-########### merge 20 m products  need to update in the future.
+
+########### merge 20 m products
+
 def get_h3_20m(df, res=12, postfix='20m', lat_col='land_segments/latitude', lng_col='land_segments/longitude'):
     geo_cols = {lat_col: 'lat', lng_col: 'lng'}
     tmp = df.rename(columns=geo_cols).h3.geo_to_h3(res).h3.h3_to_parent(3)
     add = {f"h3_{res:02d}_{postfix}": tmp.index} ### h3_03 alreay added # , "h3_03": tmp.h3_03.values
     return df.assign(**add) # add h3_12_20m   colum. 
 
-@dask.delayed
+
 def merge_20m(file_path=None, q_20m = None):
     df = pd.read_parquet(file_path)
     if not df.columns.str.contains('001|002|003|004').any(): return
@@ -605,16 +479,20 @@ def merge_20m(file_path=None, q_20m = None):
     df_003 = df_003.rename(columns=lambda x: x[:-4] if x.endswith('_003') else x) 
     df_004 = df.drop(columns=df.columns[df.columns.str.contains('000|001|002|003')])
     df_004 = df_004.rename(columns=lambda x: x[:-4] if x.endswith('_004') else x)
-    df_all =  pd.concat([df_000, df_001, df_002,df_003,df_004])
+    df_20m =  pd.concat([df_000, df_001, df_002,df_003,df_004])
     ########## apply the filter
     if q_20m is not None:
-        df_all = df_all.query(q_20m)
+        df_20m = df_20m.query(q_20m)
     # update h3_12 index
-    df_all_ddf = ddf.from_pandas(df_all,  chunksize = 40000)
-    df_all_ddf = df_all_ddf.map_partitions(get_h3_20m, res=12, postfix='20m', lat_col='land_segments/latitude_20m', lng_col='land_segments/longitude_20m')
-    df_all = df_all_ddf.compute()
-    df_all.set_index('h3_12_20m', drop=True, inplace=True)
-    df_all.rename_axis("h3_12", inplace=True)
+    df_20m = get_h3_20m(df_20m, res=12, postfix='20m', lat_col='land_segments/latitude_20m', lng_col='land_segments/longitude_20m')
+    df_20m = df_20m_ddf.compute()
+    df_20m.set_index('h3_12_20m', drop=True, inplace=True)
+    df_20m.rename_axis("h3_12", inplace=True)
+    # Create geometry column from latitude and longitude
+    geometry = gpd.points_from_xy(df_20m['land_segments/longitude_20m'],df_20m['land_segments/latitude_20m'],crs="EPSG:4326")
+    # Convert to GeoDataFrame
+    df_20m = gpd.GeoDataFrame(df_20m, geometry=geometry, crs="EPSG:4326")
     # delete this file, later will write. 
     os.remove(file_path) # delete old file.
-    df_all.to_parquet(file_path, engine="pyarrow") ### directly write new file.
+    df_20m.to_parquet(file_path, engine="pyarrow") ### directly write new file.
+    #return df_20m 

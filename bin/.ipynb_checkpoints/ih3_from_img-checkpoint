@@ -13,18 +13,18 @@ from scipy import ndimage # mathematics, science, and engineering.
 from dask.distributed import Client, progress
 
 #import easegridindex as egi
-import gedih3 as gh3 # gh3 code
+import icesatih3 as gh3 # gh3 code
 
 # IN_DIR = '/gpfs/data1/vclgp/decontot/data/raster/esa_land_cover/'
 # OUT_DIR='/gpfs/data1/vclgp/data/iss_gedi/h3/ancillary'
 from dask import config as cfg
 
-
+ROOT_PATH='/gpfs/data1/vclgp/xiongl/IS2global/data/h3/atl08/shots_hex'
 
 
 
 def getCmdArgs():
-    p = argparse.ArgumentParser(description = "Incorporate information from image data to GEDI shots")
+    p = argparse.ArgumentParser(description = "Incorporate information from image data to is2 shots")
     
     p.add_argument("-o", "--output", dest="output", required=True, type=str, help="output directory or file path")
     p.add_argument("-i", "--img", dest="img", required=True, type=str, default=None, help="path to raster file or directory with tiles to incorporate.")
@@ -44,7 +44,7 @@ def getCmdArgs():
     p.add_argument("-n", "--cores", dest="cores", required=False, type=int, default=n, help=f"number of cpu cores to use [default = {n}]")
     p.add_argument("-s", "--threads", dest="threads", required=False, type=int, default=1, help="number of threads per cpu [default = 1]")
     p.add_argument("-A", "--ram", dest="ram", required=False, type=int, default=20, help="maximum RAM usage per cpu - in Giga Bytes [default = 20]")
-    p.add_argument("-p", "--port", dest="port", required=False, type=int, default=10000, help="port where to open dask dashboard [default = 10000]")
+    p.add_argument("-p", "--port", dest="port", required=False, type=int, default=30000, help="port where to open dask dashboard [default = 30000]")
     
     cmdargs = p.parse_args()
     return cmdargs
@@ -58,7 +58,7 @@ def get_img_tile(img_path): # return tile boundary
 def wait_tile(img_path): # add delay to read image tiles.
     return get_img_tile(img_path) 
 
-def load_img_tiles(dir_path, file_format='tif'):    
+def load_img_tiles(dir_path, file_format='tif'):   # get image bounds, image tile list. 
     
     if os.path.isfile(dir_path):
         img_paths = [dir_path]
@@ -73,7 +73,7 @@ def load_img_tiles(dir_path, file_format='tif'):
     # rdf = all image tiles' geometry
     # index = image tile name.
     rdf = gpd.GeoDataFrame({'file':img_paths}, geometry=gpd.GeoSeries(fimgs), crs=crs)
-    rdf.index = [os.path.basename(i).split('.')[0] for i in img_paths]
+    rdf.index = [os.path.basename(i).split('.')[0] for i in img_paths] # index = image tile file name .
     return rdf
 
 ## -- window functions
@@ -144,7 +144,7 @@ def get_window_func(band=0, size=3, fid=0):
 
 def pixels_to_points(df, rdf, window_funcs=[], geo=False, band_names=None, fill_nas=None, drop_nas=False, struct=None):       
     odf = gpd.GeoDataFrame(df, geometry=gpd.points_from_xy(df['land_segments/longitude'], df['land_segments/latitude']), crs=4326)
-    odf = odf.reset_index().overlay(rdf.to_crs(odf.crs)).set_index('file')
+    odf = odf.reset_index().overlay(rdf.to_crs(odf.crs)).set_index('file') # filtering is2 data within image. image tile name = index
     tiles = odf.index.unique()
 
     fdf = []
@@ -154,15 +154,16 @@ def pixels_to_points(df, rdf, window_funcs=[], geo=False, band_names=None, fill_
         if fill_nas is not None:
             ras = ras.fillna(fill_nas)
         
-        tdf = odf.loc[[t]].set_index('h3_12').to_crs(ras.rio.crs)
+        tdf = odf.loc[[t]].set_index('h3_12').to_crs(ras.rio.crs)# use file index to locate, then reset h3_12 index.
         
         if len(tdf) == 0:
             ras.close()
             continue
         
-        tgt_x = xr.DataArray(tdf.geometry.x, dims="points")
-        tgt_y = xr.DataArray(tdf.geometry.y, dims="points")
-        pts = ras.sel(x=tgt_x, y=tgt_y, method='nearest', drop=False)
+        tgt_x = xr.DataArray(tdf.geometry.x, dims="points") # is2 x
+        tgt_y = xr.DataArray(tdf.geometry.y, dims="points") # is2 y
+        # xarray.DataArray.sel 
+        pts = ras.sel(x=tgt_x, y=tgt_y, method='nearest', drop=False)  # get nearest pixel for each x, y 
         
         full_names = [f"b{i}" for i in range(ras.shape[0])]
         if hasattr(ras, 'long_name'):
@@ -171,8 +172,8 @@ def pixels_to_points(df, rdf, window_funcs=[], geo=False, band_names=None, fill_
         if band_names is None:
             band_names = full_names
         
-        ras_df = pts.to_dataframe(name='var')
-        for i,b in enumerate(ras_df.index.get_level_values(0).unique()):
+        ras_df = pts.to_dataframe(name='var') # convert to df
+        for i,b in enumerate(ras_df.index.get_level_values(0).unique()): # add value to original is2 tdf
             tdf[ band_names[i] ] = ras_df.loc[b]['var'].to_numpy()
        
         dst = np.array([(ras_df.loc[b].x - tdf.geometry.x).abs() , (ras_df.loc[b].y - tdf.geometry.y).abs()]).mean(axis=0)
@@ -180,7 +181,7 @@ def pixels_to_points(df, rdf, window_funcs=[], geo=False, band_names=None, fill_
         
         keep_cols = ['land_segments/delta_time', 'relative_pixel_distance'] + band_names
         if geo:
-            # df['land_segments/longitude']
+            
             tdf = gpd.GeoDataFrame(tdf, geometry=gpd.points_from_xy(tdf['land_segments/longitude'], tdf['land_segments/latitude']), crs=4326)
             keep_cols.append('geometry')
         
@@ -209,7 +210,7 @@ def pixels_to_points(df, rdf, window_funcs=[], geo=False, band_names=None, fill_
     fdf = pd.concat(fdf)
     return fdf
 
-def dask_split_procs(df, client, client_kwargs, n=1000):        
+def dask_split_procs(df, client, client_kwargs, n=1000):    # not used function.      
     for i in np.arange(0, df.npartitions, n):
         print(f"processing {i} to {i+n} of {df.npartitions}")
         _ = df.partitions[i:(i+n)].persist()
@@ -231,17 +232,27 @@ if __name__ == '__main__':
     else:
         print("## -- user cleared - opening distributed backend")
 
+## -- DEBUG
+    hex_ids=None
+    if args.resume and os.path.isdir(args.output) and not args.egi:
+        ofiles = glob.glob(os.path.join(args.output, '*'))
+        hex_ids = [os.path.basename(i).split('.')[0] for i in ofiles]
+        ### if it finished.
+        hex_files = glob.glob(os.path.join(ROOT_PATH,'*'))
+        if len(hex_ids) >= len(hex_files):
+            print('## -- all hex files are processed.')
+            sys.exit("## -- DONE")
+    ## --
+
+
     client_kwargs = {
         'n_workers':args.cores, 
         'threads_per_worker':args.threads, 
-        'timeout':300,
         'dashboard_address':f':{args.port}', 
-        'memory_limit':f'{args.ram}GB', 
-        'silence_logs':logging.ERROR
+        'memory_limit':f'{args.ram}GB' 
+        #'silence_logs':logging.ERROR
     }
 
-    # disable the heartbeats of the dask workers.
-    cfg.set({'distributed.scheduler.worker-ttl': None})
 
     client = Client(**client_kwargs)
     print("## -- dask dashboard available at:", client.dashboard_link)
@@ -252,15 +263,9 @@ if __name__ == '__main__':
     anci = {"quality_flags":["quality_flag"]} if args.quality else None
     preq = "quality_flag" if args.quality else None
     
-    ## -- DEBUG
-    hex_ids=None
-    if args.resume and os.path.isdir(args.output) and not args.egi:
-        ofiles = glob.glob(os.path.join(args.output, '*'))
-        hex_ids = [os.path.basename(i).split('.')[0] for i in ofiles]
-    ## --
-    
     print("## -- reading distributed data frame")
-    gdf = gh3.load_gedi(atl08=['land_segments/delta_time','land_segments/longitude','land_segments/latitude'], anci=anci, pre_query=preq, square_tiles=args.egi, region=rdf, ignore_parts=hex_ids)    
+    # delay function h3_load_cell used in load is2
+    gdf = gh3.load_is2(atl08=['land_segments/delta_time','land_segments/longitude','land_segments/latitude'], anci=anci, pre_query=preq, square_tiles=args.egi, region=rdf, ignore_parts=hex_ids)    
     g_meta = gdf.partitions[0].compute()
     
     print("## -- scheduling image processing")
@@ -270,6 +275,10 @@ if __name__ == '__main__':
         wfs = [get_window_func(*i) for i in wfs]
     
     meta = pixels_to_points(g_meta, rdf=rdf, window_funcs=wfs, geo=args.geo, band_names=args.band_names, fill_nas=args.fillna, drop_nas=args.dropna)
+    # AttributeError: 'NoneType' object has no attribute 'head'
+    if meta is None:
+        print('## -- no data in the image')
+        sys.exit("## -- DONE")
     gdf = gdf.map_partitions(pixels_to_points, rdf=rdf, window_funcs=wfs, geo=args.geo, band_names=args.band_names, fill_nas=args.fillna, drop_nas=args.dropna, struct=meta.head(0), meta=meta)
     
     print("## -- loading and exporting data")
@@ -294,9 +303,6 @@ if __name__ == '__main__':
         progress(files)
         print('')
 
-    try:
-        client.close()
-    except:
-        pass
     
+    client.close()
     sys.exit("## -- DONE")

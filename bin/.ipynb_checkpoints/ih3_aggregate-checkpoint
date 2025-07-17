@@ -2,9 +2,9 @@
 import argparse, sys, os, re
 
 def getCmdArgs():
-    p = argparse.ArgumentParser(description = "Aggregate GEDI shots spatially using h3 (hexagons) or egi (pixels) system")
+    p = argparse.ArgumentParser(description = "Aggregate icesat shots spatially using h3 (hexagons) or egi (pixels) system")
     
-    p.add_argument("-i", "--input", dest="input", required=True, type=str, help="input file or directory with indexed GEDI shots")
+    p.add_argument("-i", "--input", dest="input", required=True, type=str, help="input file or directory with indexed icesat shots")
     p.add_argument("-o", "--output", dest="output", required=True, type=str, help="output directory or file name")
     p.add_argument("-m", "--mapper", dest="mapper", required=False, type=str, default='mean', help="how to aggregate shots under pandas standard - string with single function name or quoted list/dictionary: 'mean' or \"['mean', 'std', 'count']\" or \"{'agbd':['mean','count'], 'sensitivity':['mean']}\"")    
     p.add_argument("-r", "--res", dest="res", required=False, type=int,  default=6, help="resolution level of h3/egi system to aggregate to")
@@ -19,7 +19,7 @@ def getCmdArgs():
     p.add_argument("-n", "--cores", dest="cores", required=False, type=int, default=n, help=f"number of cpu cores to use [default = {n}]")
     p.add_argument("-s", "--threads", dest="threads", required=False, type=int, default=1, help="number of threads per cpu [default = 1]")
     p.add_argument("-A", "--ram", dest="ram", required=False, type=int, default=20, help="maximum RAM usage per cpu - in Giga Bytes [default = 20]")
-    p.add_argument("-p", "--port", dest="port", required=False, type=int, default=10000, help="port where to open dask dashboard [default = 10000]")
+    p.add_argument("-p", "--port", dest="port", required=False, type=int, default=30000, help="port where to open dask dashboard [default = 30000]")
     
     cmdargs = p.parse_args()
     return cmdargs
@@ -28,7 +28,7 @@ if __name__ == '__main__':
     args = getCmdArgs()
 
     os.environ['USE_PYGEOS'] = '0' 
-    import gedih3 as gh3
+    import icesath3 as gh3
     import dask, logging, glob, ast
     from dask.distributed import Client, progress
 

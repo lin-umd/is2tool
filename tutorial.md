@@ -270,6 +270,9 @@ optional arguments:
 
 Aggregate exported shots into vector [.gpkg] or raster [.tif] files at a given resolution. If rasterizing shots indexed with the H3 system, the output pixel size will be equivalent to the hexagons average diameter and their values will be resampled from overlapping hexagon centroids.
 
+### Example:
+ih3_aggregate -i /gpfs/data1/vclgp/xiongl/ProjectErrorModel/result/is2_rmse -o /gpfs/data1/vclgp/xiongl/ProjectErrorModel/result/global_is2_error -m mean -r 6 -u rmse 
+
 
 #
 ## `ih3_from_img`

@@ -11,7 +11,7 @@ def getCmdArgs():
 if __name__ == '__main__':
     args = getCmdArgs()
     
-    from gedidriver import execute_query
+    from icesatdriver import execute_query
 
     q = "select iso3, name from fia.countries"
    
