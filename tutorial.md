@@ -79,9 +79,9 @@ optional arguments:
   -h3, --h3   list H3 system only
 ```
 
-List resolutions available for aggregation of ICESat_2 products using H3 and EGI spatial indexing systems.
+List resolutions available for aggregation of ICESat_2 products using H3   spatial indexing systems.
 
-H3 is the [hexagon hierarchical spatial index](https://h3geo.org/) developed by Uber. EGI stands for Ease Grid Index - a custom spatial index system with perfectly nested squares based on the EASE-Grid 2.0 Global CRS (EPSG:6933) - developed by yours truly ;)
+H3 is the [hexagon hierarchical spatial index](https://h3geo.org/) developed by Uber. 
 
 
 ### Example:
@@ -237,7 +237,7 @@ Print the column names and data types of exported ICESat_2/H3 datasets.
 usage: ih3_aggregate [-h] -i INPUT -o OUTPUT [-m MAPPER] [-r RES] [-d DROP_COLUMNS [DROP_COLUMNS ...]]
                      [-u USE_COLUMNS [USE_COLUMNS ...]] [-g] [-t] [-f FORMAT] [-n CORES] [-s THREADS] [-A RAM] [-p PORT]
 
-Aggregate icesat-2 shots spatially using h3 (hexagons) or egi (pixels) system
+Aggregate icesat-2 shots spatially using h3 (hexagons) system
 
 optional arguments:
   -h, --help            show this help message and exit
@@ -249,7 +249,7 @@ optional arguments:
                         how to aggregate shots under pandas standard - string with single function name or quoted
                         list/dictionary: 'mean' or "['mean', 'std', 'count']" or "{'agbd':['mean','count'],
                         'sensitivity':['mean']}"
-  -r RES, --res RES     resolution level of h3/egi system to aggregate to
+  -r RES, --res RES     resolution level of h3 system to aggregate to
   -d DROP_COLUMNS [DROP_COLUMNS ...], --drop_columns DROP_COLUMNS [DROP_COLUMNS ...]
                         columns to ignore in aggregation - may be useful for non-dictionary mappers
   -u USE_COLUMNS [USE_COLUMNS ...], --use_columns USE_COLUMNS [USE_COLUMNS ...]
@@ -297,7 +297,6 @@ optional arguments:
                         number (0 indexed), window size (1-9 pixels) and operation id (0 = sum, 1 = mean, 2 = median, 3 = mode),
                         respectively; e.g. -w 033 151 152
   -y, --quality         apply latest quality filter recipe
-  -e, --egi             export shots with EGI spatial index (exact pixels) instead of H3 (approximate hexagons) - much slower!
   -m, --merge           merge outputs and export to single file
   -g, --geo             export file as georreferenced points [.gpkg]
   -l FILLNA, --fillna FILLNA
