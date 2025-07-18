@@ -237,12 +237,12 @@ Print the column names and data types of exported ICESat_2/H3 datasets.
 usage: ih3_aggregate [-h] -i INPUT -o OUTPUT [-m MAPPER] [-r RES] [-d DROP_COLUMNS [DROP_COLUMNS ...]]
                      [-u USE_COLUMNS [USE_COLUMNS ...]] [-g] [-t] [-f FORMAT] [-n CORES] [-s THREADS] [-A RAM] [-p PORT]
 
-Aggregate GEDI shots spatially using h3 (hexagons) or egi (pixels) system
+Aggregate icesat-2 shots spatially using h3 (hexagons) or egi (pixels) system
 
 optional arguments:
   -h, --help            show this help message and exit
   -i INPUT, --input INPUT
-                        input file or directory with indexed GEDI shots
+                        input file or directory with indexed icesat-2 shots
   -o OUTPUT, --output OUTPUT
                         output directory or file name
   -m MAPPER, --mapper MAPPER
@@ -281,7 +281,7 @@ usage: ih3_from_img [-h] -o OUTPUT -i IMG [-f FORMAT] [-b BAND_NAMES [BAND_NAMES
                     [-w WINDOW_OPERATIONS [WINDOW_OPERATIONS ...]] [-y] [-e] [-m] [-g] [-l FILLNA] [-d] [-r] [-n CORES]
                     [-s THREADS] [-A RAM] [-p PORT]
 
-Incorporate information from image data to GEDI shots
+Incorporate information from image data to icesat-2 shots
 
 optional arguments:
   -h, --help            show this help message and exit
