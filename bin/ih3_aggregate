@@ -1,13 +1,17 @@
 #! python
 import argparse, sys, os, re
+os.environ['USE_PYGEOS'] = '0' 
+import icesath3 as gh3
+import dask, logging, glob, ast
+from dask.distributed import Client, progress
 
 def getCmdArgs():
-    p = argparse.ArgumentParser(description = "Aggregate icesat shots spatially using h3 (hexagons) or egi (pixels) system")
-    
-    p.add_argument("-i", "--input", dest="input", required=True, type=str, help="input file or directory with indexed icesat shots")
+    p = argparse.ArgumentParser(description = "Aggregate icesat data spatially using h3 (hexagons)")
+  
+    p.add_argument("-i", "--input", dest="input", required=True, type=str, help="input file or directory with indexed icesat data")
     p.add_argument("-o", "--output", dest="output", required=True, type=str, help="output directory or file name")
-    p.add_argument("-m", "--mapper", dest="mapper", required=False, type=str, default='mean', help="how to aggregate shots under pandas standard - string with single function name or quoted list/dictionary: 'mean' or \"['mean', 'std', 'count']\" or \"{'agbd':['mean','count'], 'sensitivity':['mean']}\"")    
-    p.add_argument("-r", "--res", dest="res", required=False, type=int,  default=6, help="resolution level of h3/egi system to aggregate to")
+    p.add_argument("-m", "--mapper", dest="mapper", required=False, type=str, default='mean', help="how to aggregate data under pandas standard - string with single function name or quoted list/dictionary: 'mean' or \"['mean', 'std', 'count']\" or \"{'agbd':['mean','count'], 'sensitivity':['mean']}\"")    
+    p.add_argument("-r", "--res", dest="res", required=False, type=int,  default=6, help="resolution level of h3 system to aggregate to")
     p.add_argument("-d", "--drop_columns", dest="drop_columns", required=False, nargs='+', default=['shot_number'], help="columns to ignore in aggregation - may be useful for non-dictionary mappers")
     p.add_argument("-u", "--use_columns", dest="use_columns", required=False, nargs='+', default=None, help="only aggregate few columns")
 
@@ -26,12 +30,6 @@ def getCmdArgs():
 
 if __name__ == '__main__':    
     args = getCmdArgs()
-
-    os.environ['USE_PYGEOS'] = '0' 
-    import icesath3 as gh3
-    import dask, logging, glob, ast
-    from dask.distributed import Client, progress
-
     is_greedy = gh3.safe.tell_user(os.cpu_count() // 2, verbose=False)
     is_greedy = gh3.safe.tell_user(os.cpu_count() // 2) # 2nd time gets cpu percent correctly
     if is_greedy and not gh3.safe.clear_user(): 
@@ -60,7 +58,7 @@ if __name__ == '__main__':
             
     print("## -- scheduling aggregation")
     mapper = ast.literal_eval(args.mapper) if '[' in args.mapper or "{" in args.mapper else args.mapper
-    fagg = gh3.h3_aggregate if 'h3' in gdf.index.name else gh3.egi_aggregate
+    fagg = gh3.h3_aggregate 
     
     aggdf = fagg(gdf, level=args.res, agg=mapper, centroids=False)
     cols = [i for i in aggdf.columns if 'h3' not in i and 'egi' not in i]

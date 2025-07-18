@@ -1,2 +1,2 @@
-from gedidriver.config import *
-from gedidriver.utils import *
+from icesatdriver.config import *
+from icesatdriver.utils import *

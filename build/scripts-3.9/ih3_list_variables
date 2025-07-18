@@ -1,5 +1,7 @@
 #!python
 import argparse
+import pandas as pd
+from icesath3 import list_icesat_variables, list_anci_variables
 
 def getCmdArgs():
     p = argparse.ArgumentParser(description = "List variables available in the icesat H3 database")
@@ -12,9 +14,7 @@ def getCmdArgs():
 
 if __name__ == '__main__':
     args = getCmdArgs()
-    
-    import pandas as pd
-    from icesath3 import list_gedi_variables, list_anci_variables
+
 
     vars = list_icesat_variables(args.grep)
     

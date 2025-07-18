@@ -49,15 +49,12 @@ def read_geopackage_schema(path):
 
 def list_icesat_variables(keyword=None):
     """
-    returns a dictionary of all columns available in the icesat-h3 files 
+    Returns a DataFrame of all columns available in the ICESat-H3 files (currently only ATL08).
     """
-    #prods = ['l2a','l2b','l4a'] ### right now only atl08
-    prods = ['atl08']
-    df = pd.DataFrame()
-    for p in prods:
-        f = glob.glob(ROOT_PATH + f'{p}/shots_hex/*.parquet')[0]
-        schema = read_parquet_schema(f).assign(product = p) #### col: product, p
-        df = pd.concat([df, schema])
+    product = 'atl08'
+    f = next(glob.iglob(f"{ROOT_PATH}{product}/shots_hex/*.parquet"))
+    df = read_parquet_schema(f)
+    df['product'] = product
     if bool(keyword):
         df = df[df.column.str.match(f".*{keyword}.*")] 
     return df.set_index('product')
@@ -485,7 +482,6 @@ def merge_20m(file_path=None, q_20m = None):
         df_20m = df_20m.query(q_20m)
     # update h3_12 index
     df_20m = get_h3_20m(df_20m, res=12, postfix='20m', lat_col='land_segments/latitude_20m', lng_col='land_segments/longitude_20m')
-    df_20m = df_20m_ddf.compute()
     df_20m.set_index('h3_12_20m', drop=True, inplace=True)
     df_20m.rename_axis("h3_12", inplace=True)
     # Create geometry column from latitude and longitude

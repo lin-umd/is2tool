@@ -1,5 +1,7 @@
 #!python
 import argparse
+import glob, os
+from icesath3 import read_parquet_schema, read_geopackage_schema
 
 def getCmdArgs():
     p = argparse.ArgumentParser(description = "List variables available in the icesat H3 database")
@@ -11,8 +13,7 @@ def getCmdArgs():
 if __name__ == '__main__':
     args = getCmdArgs()
     
-    import glob, os
-    from icesath3 import read_parquet_schema, read_geopackage_schema
+
     
     f = args.input if os.path.isfile(args.input) else glob.glob(args.input + '/*')[0]
     is_parquet = f.endswith('.parquet') or f.endswith('.pq') or f.endswith('.parq')

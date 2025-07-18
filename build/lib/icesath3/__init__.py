@@ -1,5 +1,5 @@
-from gedih3.tools import *
-import gedih3.safety as safe
+from icesath3.tools import *
+import icesath3.safety as safe
 
 
 

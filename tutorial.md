@@ -140,7 +140,7 @@ Quick access to 3 letter country codes. Those countries boundarias are available
 
 ```
 usage: ih3_extract_shots [-h] -o OUTPUT [-r REGION] [-atl08 ATL08 [ATL08 ...]] [-a ANCI] [-t0 TIME_START] [-t1 TIME_END]
-                         [-q QUERY] [-q_20m QUERY_20M] [-b] [-m] [-g] [-f FORMAT] [-n CORES] [-s THREADS] [-A RAM] [-p PORT]
+                         [-q QUERY] [-q_20m QUERY_20M] [-b] [-m]  [-f FORMAT] [-n CORES] [-s THREADS] [-A RAM] [-p PORT]
 
 Filter and export IS2 ATL08 data using h3
 
@@ -165,7 +165,6 @@ optional arguments:
                         land_segments/terrain/h_te_best_fit_20m]
   -b, --strong_beam     select only strong beams
   -m, --merge           merge outputs and export to single file
-  -g, --geo             export file as georreferenced points
   -f FORMAT, --format FORMAT
                         output files format [default = parquet]
   -n CORES, --cores CORES
@@ -192,7 +191,7 @@ Then, once the `ih3` tool is running, navigate to `localhost:10000` in the brows
 
 Let's query foliage height diversity, canopy cover, biomass and structural complexity from high quality geolocated ICESat_2 shots over puerto_rico and export the results to a directory called `ICESat_2_puerto_rico`: 
 
-`ih3_extract_shots -o /gpfs/data1/vclgp/xiongl/IS2global/process/puerto_rico   -r PRI --atl08 land_segments/canopy/h_canopy_20m --geo \
+`ih3_extract_shots -o /gpfs/data1/vclgp/xiongl/IS2global/process/puerto_rico   -r PRI --atl08 land_segments/canopy/h_canopy_20m \
 -q_20m '`land_segments/canopy/h_canopy_20m` >= 0.5 and `land_segments/canopy/h_canopy_20m` < 200' \
 -t0 2023-01-01 -t1 2023-12-31  --strong_beam --cores 20 `
 
