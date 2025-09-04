@@ -201,8 +201,6 @@ if __name__ == '__main__':
     
     files = gh3.export_parts(gdf, opath, fmt=args.format).persist() 
     progress(files)  ## show the progress of files writing
-    print('')
-    
 
     #### if it contains 20 m product
     opath = re.sub('/*$', '', opath) ## remove last '/' if exists.
@@ -211,8 +209,7 @@ if __name__ == '__main__':
         files_list = glob.glob(opath + "/*." +  args.format)
         cmds = [gh3.merge_20m(file_path=f, q_20m = args.query_20m) for f in files_list]
         progress(dask.persist(*cmds))
-        print('') 
-        
+
     # merge at last
     if args.merge: # merge all parquet files.  # /path/filename
         print('## -- output to a single file')

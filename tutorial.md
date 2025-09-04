@@ -1,6 +1,6 @@
 # ICESat_2 h3 command tool
-### *Author: Lin xiong, Tiago de Conto*
-### *April 23, 2024*
+### *Author: Lin Xiong, Tiago de Conto*
+### *Sep, 2025*
 
 <br>
 
@@ -35,7 +35,7 @@ options:
   -a, --ancillary       include variables from ancillary database
   -g GREP, --grep GREP  match substring
   -p PRODUCTS [PRODUCTS ...], --products PRODUCTS [PRODUCTS ...]
-                        search only specified ICESat_2 [l2a, l2b, l4a] and/or ancillary products
+                        search only specified ICESat_2 ATL08 and/or ancillary products
 ```
 
 List variables available in the ICESat_2/H3 database as a 3 column table:
@@ -47,23 +47,18 @@ List variables available in the ICESat_2/H3 database as a 3 column table:
 - [`glad_forest_loss`](https://developers.google.com/earth-engine/datasets/catalog/UMD_hansen_global_forest_change_2021_v1_9): forest loss information from the Landsat derived product by Hansen et al (2012) at 30m resolution
 - [`esa_land_cover`](https://developers.google.com/earth-engine/datasets/catalog/ESA_WorldCover_v100): land cover classification from ESA/sentinel at 10m resolution
 - [`nasa_dem`](https://developers.google.com/earth-engine/datasets/catalog/NASA_NASADEM_HGT_001): topography information from the NASA dem product at 30m resolution
+- [`copernicus DEM`](https://dataspace.copernicus.eu/explore-data/data-collections/copernicus-contributing-missions/collections-description/COP-DEM): Copernicus DEM - Global and European Digital Elevation Model
 
 ### Example:
 
-`ih3_list_variables -a -g canopy`
+`ih3_list_variables -a -g slope`
 
 ```
-| product   | column                                    | dtype   |
-|:----------|:------------------------------------------|:--------|
-| atl08     | land_segments/canopy/h_canopy             | float   |
-| atl08     | land_segments/canopy/h_canopy_20m_000     | float   |
-| atl08     | land_segments/canopy/h_canopy_20m_001     | float   |
-| atl08     | land_segments/canopy/h_canopy_20m_002     | float   |
-| atl08     | land_segments/canopy/h_canopy_20m_003     | float   |
-| atl08     | land_segments/canopy/h_canopy_20m_004     | float   |
-| atl08     | land_segments/canopy/h_canopy_abs         | float   |
-| atl08     | land_segments/canopy/h_canopy_quad        | float   |
-| atl08     | land_segments/canopy/h_canopy_uncertainty | float   |
+| product    | column                              | dtype   |
+|:-----------|:------------------------------------|:--------|
+| atl08      | land_segments/terrain/terrain_slope | float   |
+| copernicus | slope                               | int16   |
+| nasadem    | slope                               | int16   |
 ```
 
 #
@@ -90,21 +85,24 @@ H3 is the [hexagon hierarchical spatial index](https://h3geo.org/) developed by 
 
 ```
 ## -- H3 levels - hexagons
-       average edge length (m)  average area (m^2)
-level                                             
-0                  1281256.011   4357449416078.392
-1                   483056.839    609788441794.134
-2                   182512.957     86801780398.997
-3                    68979.222     12393434655.088
-4                    26071.760      1770347654.491
-5                     9854.091       252903858.182
-6                     3724.533        36129062.164
-7                     1406.476         5161293.360
-8                      531.414          737327.598
-9                      200.786          105332.513
-10                      75.864           15047.502
-11                      28.664            2149.643
-12                      10.830             307.092
+       average edge length (m)  average area (m^2)  number of unique indexes
+level                                                                       
+0                  1107712.591   4250546847700.000                       122
+1                   418676.005    607220978242.900                       842
+2                   158244.656     86745854034.700                      5882
+3                    59810.858     12392264862.100                     41162
+4                    22606.379      1770323551.700                    288122
+5                     8544.408       252903364.500                   2016842
+6                     3229.483        36129052.100                  14117882
+7                     1220.630         5161293.200                  98825162
+8                      461.355          737327.600                 691776122
+9                      174.376          105332.500                4842432842
+10                      65.908           15047.500               33897029882
+11                      24.911            2149.600              237279209162
+12                       9.416             307.100             1660954464122
+13                       3.560              43.900            11626681248842
+14                       1.349               6.300            81386768741882
+15                       0.510               0.900           569707381193162
 
 ```
 
@@ -124,15 +122,12 @@ Quick access to 3 letter country codes. Those countries boundarias are available
 
 ### Example:
 
-`ih3_list_iso3 -g states`
+`ih3_list_iso3 -g gabon`
 
 ```
-|    | iso3   | name                                 |
-|---:|:-------|:-------------------------------------|
-|  0 | FSM    | Micronesia, Federated States of      |
-|  1 | UMI    | United States Minor Outlying Islands |
-|  2 | USA    | United States                        |
-|  3 | VIR    | United States Virgin Islands         |
+|    | iso3   | name   |
+|---:|:-------|:-------|
+|  0 | GAB    | Gabon  |
 ```
 
 #
@@ -150,7 +145,7 @@ optional arguments:
                         output directory or file path
   -r REGION, --region REGION
                         path to vector (.shp, .gpkg, .kml etc.) or raster (.tif) file with region of interest to extract shots
-                        from OR iso3 country code (if not, query all land hexs in data)
+                        from OR iso3 country code (if not, query all land hexs in data, do not query all!)
   -atl08 ATL08 [ATL08 ...], --atl08 ATL08 [ATL08 ...]
                         ICESat_2 atl08 variables to export
   -a ANCI, --anci ANCI  quoted dictionary of ancillary variables to export - e.g. "{'glad_forest_loss':['loss','lossyear']}"
@@ -172,7 +167,7 @@ optional arguments:
   -s THREADS, --threads THREADS
                         number of threads per cpu [default = 1]
   -A RAM, --ram RAM     maximum RAM usage per cpu - in Giga Bytes [default = 20]
-  -p PORT, --port PORT  port where to open dask dashboard [default = 34999]
+  -p PORT, --port PORT  port where to open dask dashboard [default = 8787]
 ```
 
 Extract spatially indexed ICESat_2 shots for a given region (or globally), filtered or not, geolocated or not, using distributed processes with RAM thresholding. 
@@ -189,13 +184,13 @@ Then, once the `ih3` tool is running, navigate to `localhost:10000` in the brows
 
 ### Example:
 
-Let's query foliage height diversity, canopy cover, biomass and structural complexity from high quality geolocated ICESat_2 shots over puerto_rico and export the results to a directory called `ICESat_2_puerto_rico`: 
+Let's query canopy height from high quality geolocated ICESat_2 shots over Gabon and export the results to a directory called `is2_gabon`: 
 
-`ih3_extract_shots -o /gpfs/data1/vclgp/xiongl/IS2global/process/puerto_rico   -r PRI --atl08 land_segments/canopy/h_canopy_20m \
--q_20m '`land_segments/canopy/h_canopy_20m` >= 0.5 and `land_segments/canopy/h_canopy_20m` < 200' \
+`ih3_extract_shots -o /gpfs/data1/vclgp/xiongl/tmp/is2_gabon   -r GAB --atl08 land_segments/canopy/h_canopy \
+-q '`land_segments/canopy/h_canopy` < 200' \
 -t0 2023-01-01 -t1 2023-12-31  --strong_beam --cores 20 `
 
-The output files stored at `ICESat_2_puerto_rico` are spatially partitioned - i.e. each file contains ICESat_2 shots with the same parent hexagon at H3 resolution 3.
+The output files stored at `is2_gabon` are spatially partitioned - i.e. each file contains ICESat_2 shots with the same parent hexagon at H3 resolution 3.
 
 #
 ## `ih3_read_schema`
@@ -215,19 +210,19 @@ Print the column names and data types of exported ICESat_2/H3 datasets.
 
 ### Example:
 
-`ih3_read_schema -i ICESat_2_puerto_rico/`
+`ih3_read_schema -i is2_gabon`
 
 ```
-|    | column                            | dtype   |
-|---:|:----------------------------------|:--------|
-|  0 | land_segments/latitude_20m        | float   |
-|  1 | orbit_info/sc_orient              | int8    |
-|  2 | land_segments/canopy/h_canopy_20m | float   |
-|  3 | land_segments/longitude_20m       | float   |
-|  4 | land_segments/delta_time          | double  |
-|  5 | root_beam                         | string  |
-|  6 | geometry                          | binary  |
-|  7 | h3_12                             | string  |
+|    | column                        | dtype   |
+|---:|:------------------------------|:--------|
+|  0 | land_segments/delta_time      | double  |
+|  1 | land_segments/latitude        | float   |
+|  2 | orbit_info/sc_orient          | int8    |
+|  3 | land_segments/longitude       | float   |
+|  4 | root_beam                     | string  |
+|  5 | land_segments/canopy/h_canopy | float   |
+|  6 | geometry                      | binary  |
+|  7 | h3_12                         | string  |
 ```
 
 #
@@ -259,18 +254,18 @@ optional arguments:
   -f FORMAT, --format FORMAT
                         output files format [default = parquet]
   -n CORES, --cores CORES
-                        number of cpu cores to use [default = 32]
+                        number of cpu cores to use [default = 10]
   -s THREADS, --threads THREADS
                         number of threads per cpu [default = 1]
   -A RAM, --ram RAM     maximum RAM usage per cpu - in Giga Bytes [default = 20]
-  -p PORT, --port PORT  port where to open dask dashboard [default = 10000]
+  -p PORT, --port PORT  port where to open dask dashboard [default = 8787]
 
 ```
 
 Aggregate exported shots into vector [.gpkg] or raster [.tif] files at a given resolution. If rasterizing shots indexed with the H3 system, the output pixel size will be equivalent to the hexagons average diameter and their values will be resampled from overlapping hexagon centroids.
 
 ### Example:
-ih3_aggregate -i /gpfs/data1/vclgp/xiongl/ProjectErrorModel/result/is2_rmse -o /gpfs/data1/vclgp/xiongl/ProjectErrorModel/result/global_is2_error -m mean -r 6 -u rmse 
+ih3_aggregate -i /gpfs/data1/vclgp/xiongl/tmp/is2_gabon -o /gpfs/data1/vclgp/xiongl/tmp/is2_gabon_r7 -m mean -r 7 -u land_segments/canopy/h_canopy
 
 
 #
@@ -296,7 +291,6 @@ optional arguments:
                         (optional) moving window operations to apply to image bands: list of 3 integer numbers representing band
                         number (0 indexed), window size (1-9 pixels) and operation id (0 = sum, 1 = mean, 2 = median, 3 = mode),
                         respectively; e.g. -w 033 151 152
-  -y, --quality         apply latest quality filter recipe
   -m, --merge           merge outputs and export to single file
   -g, --geo             export file as georreferenced points [.gpkg]
   -l FILLNA, --fillna FILLNA
@@ -315,5 +309,5 @@ Extract pixel information at ICESat_2 shot locations.
 
 ### Example:
 
-    `ih3_from_img -o temp -i /gpfs/data1/vclgp/xiongl/IS2global/account/HansenData -w 130 -b treecover2000 loss gain lossyear datamask`
+    `ih3_from_img -o /gpfs/data1/vclgp/xiongl/tmp/gabon -i /gpfs/data1/vclgp/xiongl/tmp/treecover2010_gabon.tif -b treecover2010`
 

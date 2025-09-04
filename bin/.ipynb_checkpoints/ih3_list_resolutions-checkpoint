@@ -1,7 +1,6 @@
 #! python
 
 import argparse
-#from easegridindex import RESOLUTIONS
 import pandas as pd 
 
 h3_edge_len = {
@@ -36,18 +35,8 @@ h3_area = {
     12:	307.092,
 }
 
-def getCmdArgs():
-    p = argparse.ArgumentParser(description = "List resolution specs for H3 spatial indexing systems")
-    p.add_argument("-h3", "--h3", dest="h3", required=False, action='store_true', help="list H3 system only")
-    cmdargs = p.parse_args()
-    return cmdargs
-
-
 if __name__ == '__main__':
     pd.set_option('display.float_format', lambda x: f'{x:.3f}')
-    args = getCmdArgs()
-    
-    #if args.h3:
     res_len = pd.DataFrame(h3_edge_len.items(), columns=['level','average edge length (m)']).set_index('level')
     res_len *= 1000
     res_area = pd.DataFrame(h3_area.items(), columns=['level','average area (m^2)']).set_index('level')

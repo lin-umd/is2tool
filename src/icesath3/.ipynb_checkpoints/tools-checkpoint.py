@@ -462,7 +462,7 @@ def get_h3_20m(df, res=12, postfix='20m', lat_col='land_segments/latitude', lng_
     add = {f"h3_{res:02d}_{postfix}": tmp.index} ### h3_03 alreay added # , "h3_03": tmp.h3_03.values
     return df.assign(**add) # add h3_12_20m   colum. 
 
-
+@dask.delayed
 def merge_20m(file_path=None, q_20m = None):
     df = pd.read_parquet(file_path)
     if not df.columns.str.contains('001|002|003|004').any(): return

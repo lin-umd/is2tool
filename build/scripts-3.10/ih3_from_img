@@ -13,7 +13,7 @@ from scipy import ndimage # mathematics, science, and engineering.
 from dask.distributed import Client, progress
 
 
-import icesath3 as ih3 # ih3 code
+import icesatih3 as ih3 # ih3 code
 
 # IN_DIR = '/gpfs/data1/vclgp/decontot/data/raster/esa_land_cover/'
 # OUT_DIR='/gpfs/data1/vclgp/data/iss_gedi/h3/ancillary'
@@ -47,7 +47,7 @@ def getCmdArgs():
     p.add_argument("-n", "--cores", dest="cores", required=False, type=int, default=n, help=f"number of cpu cores to use [default = {n}]")
     p.add_argument("-s", "--threads", dest="threads", required=False, type=int, default=1, help="number of threads per cpu [default = 1]")
     p.add_argument("-A", "--ram", dest="ram", required=False, type=int, default=20, help="maximum RAM usage per cpu - in Giga Bytes [default = 20]")
-    p.add_argument("-p", "--port", dest="port", required=False, type=int, default=8787, help="port where to open dask dashboard [default = 8787]")
+    p.add_argument("-p", "--port", dest="port", required=False, type=int, default=30000, help="port where to open dask dashboard [default = 8787]")
     
     cmdargs = p.parse_args()
     return cmdargs
@@ -235,7 +235,7 @@ if __name__ == '__main__':
     else:
         print("## -- user cleared - opening distributed backend")
 
-    ## -- DEBUG
+## -- DEBUG
     hex_ids=None
     if args.resume and os.path.isdir(args.output):
         ofiles = glob.glob(os.path.join(args.output, '*'))
@@ -245,6 +245,8 @@ if __name__ == '__main__':
         if len(hex_ids) >= len(hex_files):
             print('## -- all hex files are processed.')
             sys.exit("## -- DONE")
+    ## --
+
 
     client_kwargs = {
         'n_workers':args.cores, 

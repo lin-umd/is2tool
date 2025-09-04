@@ -1,6 +1,6 @@
 # ICESat_2 h3 command tool
-### *Author: Lin xiong, Tiago de Conto*
-### *April 23, 2024*
+### *Author: Lin Xiong, Tiago de Conto*
+### *Sep, 2025*
 
 <br>
 
@@ -35,7 +35,7 @@ options:
   -a, --ancillary       include variables from ancillary database
   -g GREP, --grep GREP  match substring
   -p PRODUCTS [PRODUCTS ...], --products PRODUCTS [PRODUCTS ...]
-                        search only specified ICESat_2 [l2a, l2b, l4a] and/or ancillary products
+                        search only specified ICESat_2 ATL08 and/or ancillary products
 ```
 
 List variables available in the ICESat_2/H3 database as a 3 column table:
@@ -47,23 +47,18 @@ List variables available in the ICESat_2/H3 database as a 3 column table:
 - [`glad_forest_loss`](https://developers.google.com/earth-engine/datasets/catalog/UMD_hansen_global_forest_change_2021_v1_9): forest loss information from the Landsat derived product by Hansen et al (2012) at 30m resolution
 - [`esa_land_cover`](https://developers.google.com/earth-engine/datasets/catalog/ESA_WorldCover_v100): land cover classification from ESA/sentinel at 10m resolution
 - [`nasa_dem`](https://developers.google.com/earth-engine/datasets/catalog/NASA_NASADEM_HGT_001): topography information from the NASA dem product at 30m resolution
+- [`copernicus DEM`](https://dataspace.copernicus.eu/explore-data/data-collections/copernicus-contributing-missions/collections-description/COP-DEM): Copernicus DEM - Global and European Digital Elevation Model
 
 ### Example:
 
-`ih3_list_variables -a -g canopy`
+`ih3_list_variables -a -g slope`
 
 ```
-| product   | column                                    | dtype   |
-|:----------|:------------------------------------------|:--------|
-| atl08     | land_segments/canopy/h_canopy             | float   |
-| atl08     | land_segments/canopy/h_canopy_20m_000     | float   |
-| atl08     | land_segments/canopy/h_canopy_20m_001     | float   |
-| atl08     | land_segments/canopy/h_canopy_20m_002     | float   |
-| atl08     | land_segments/canopy/h_canopy_20m_003     | float   |
-| atl08     | land_segments/canopy/h_canopy_20m_004     | float   |
-| atl08     | land_segments/canopy/h_canopy_abs         | float   |
-| atl08     | land_segments/canopy/h_canopy_quad        | float   |
-| atl08     | land_segments/canopy/h_canopy_uncertainty | float   |
+| product    | column                              | dtype   |
+|:-----------|:------------------------------------|:--------|
+| atl08      | land_segments/terrain/terrain_slope | float   |
+| copernicus | slope                               | int16   |
+| nasadem    | slope                               | int16   |
 ```
 
 #
@@ -150,7 +145,7 @@ optional arguments:
                         output directory or file path
   -r REGION, --region REGION
                         path to vector (.shp, .gpkg, .kml etc.) or raster (.tif) file with region of interest to extract shots
-                        from OR iso3 country code (if not, query all land hexs in data)
+                        from OR iso3 country code (if not, query all land hexs in data, do not query all!)
   -atl08 ATL08 [ATL08 ...], --atl08 ATL08 [ATL08 ...]
                         ICESat_2 atl08 variables to export
   -a ANCI, --anci ANCI  quoted dictionary of ancillary variables to export - e.g. "{'glad_forest_loss':['loss','lossyear']}"

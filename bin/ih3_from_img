@@ -13,7 +13,7 @@ from scipy import ndimage # mathematics, science, and engineering.
 from dask.distributed import Client, progress
 
 
-import icesatih3 as gh3 # gh3 code
+import icesath3 as ih3 # ih3 code
 
 # IN_DIR = '/gpfs/data1/vclgp/decontot/data/raster/esa_land_cover/'
 # OUT_DIR='/gpfs/data1/vclgp/data/iss_gedi/h3/ancillary'
@@ -30,8 +30,12 @@ def getCmdArgs():
     p.add_argument("-i", "--img", dest="img", required=True, type=str, default=None, help="path to raster file or directory with tiles to incorporate.")
     p.add_argument("-f", "--format", dest="format", required=False, type=str, default='tif', help="image format to look for [default = tif]")
     p.add_argument("-b", "--band_names", dest="band_names", required=False, type=str, nargs='+', default=None, help="(optional) band names to use in output")
-    p.add_argument("-w", "--window_operations", dest="window_operations", required=False, type=str, nargs='+', default=None, help="(optional) moving window operations to apply to image bands: list of 3 integer numbers representing band number (0 indexed), window size (1-9 pixels) and operation id (0 = sum, 1 = mean, 2 = median, 3 = mode), respectively; e.g. -w 033 151 152"),
-    p.add_argument("-y", "--quality", dest="quality", required=False, action='store_true', help="apply latest quality filter recipe")    
+    p.add_argument("-w", "--window_operations", dest="window_operations", required=False, type=str, nargs='+', default=None, 
+                   help="(optional) moving window operations to apply to image bands: " \
+                   "list of 3 integer numbers representing band number (0 indexed), " \
+                   "window size (1-9 pixels) and operation id (0 = sum, 1 = mean, 2 = median, 3 = mode), " \
+                   "respectively; e.g. -w 033 151 152")
+ 
     p.add_argument("-m", "--merge", dest="merge", required=False, action='store_true', help="merge outputs and export to single file")
     p.add_argument("-g", "--geo", dest="geo", required=False, action='store_true', help="export file as georreferenced points [.gpkg]")
 
@@ -43,7 +47,7 @@ def getCmdArgs():
     p.add_argument("-n", "--cores", dest="cores", required=False, type=int, default=n, help=f"number of cpu cores to use [default = {n}]")
     p.add_argument("-s", "--threads", dest="threads", required=False, type=int, default=1, help="number of threads per cpu [default = 1]")
     p.add_argument("-A", "--ram", dest="ram", required=False, type=int, default=20, help="maximum RAM usage per cpu - in Giga Bytes [default = 20]")
-    p.add_argument("-p", "--port", dest="port", required=False, type=int, default=30000, help="port where to open dask dashboard [default = 30000]")
+    p.add_argument("-p", "--port", dest="port", required=False, type=int, default=8787, help="port where to open dask dashboard [default = 8787]")
     
     cmdargs = p.parse_args()
     return cmdargs
@@ -223,15 +227,15 @@ def dask_split_procs(df, client, client_kwargs, n=1000):    # not used function.
 if __name__ == '__main__':
     args = getCmdArgs()
            
-    is_greedy = gh3.safe.tell_user(os.cpu_count() // 2, verbose=False)
-    is_greedy = gh3.safe.tell_user(os.cpu_count() // 2) # 2nd time gets cpu percent correctly
-    if is_greedy and not gh3.safe.clear_user(): 
+    is_greedy = ih3.safe.tell_user(os.cpu_count() // 2, verbose=False)
+    is_greedy = ih3.safe.tell_user(os.cpu_count() // 2) # 2nd time gets cpu percent correctly
+    if is_greedy and not ih3.safe.clear_user(): 
         print("## -- too many resources used by your current spawned processes - try again once those are finished")
         sys.exit("## -- EXIT")
     else:
         print("## -- user cleared - opening distributed backend")
 
-## -- DEBUG
+    ## -- DEBUG
     hex_ids=None
     if args.resume and os.path.isdir(args.output):
         ofiles = glob.glob(os.path.join(args.output, '*'))
@@ -241,8 +245,6 @@ if __name__ == '__main__':
         if len(hex_ids) >= len(hex_files):
             print('## -- all hex files are processed.')
             sys.exit("## -- DONE")
-    ## --
-
 
     client_kwargs = {
         'n_workers':args.cores, 
@@ -259,12 +261,10 @@ if __name__ == '__main__':
     print("## -- loading image tiles")
     rdf = load_img_tiles(args.img, args.format)
             
-    anci = {"quality_flags":["quality_flag"]} if args.quality else None
-    preq = "quality_flag" if args.quality else None
-    
+
     print("## -- reading distributed data frame")
     # delay function h3_load_cell used in load is2
-    gdf = gh3.load_is2(atl08=['land_segments/delta_time','land_segments/longitude','land_segments/latitude'], anci=anci, pre_query=preq, region=rdf, ignore_parts=hex_ids)    
+    gdf = ih3.load_is2(atl08=['land_segments/delta_time','land_segments/longitude','land_segments/latitude'], anci=None, pre_query=None, region=rdf, ignore_parts=hex_ids)    
     g_meta = gdf.partitions[0].compute()
     
     print("## -- scheduling image processing")
@@ -298,7 +298,7 @@ if __name__ == '__main__':
                 opath += '.parquet'
             gdf.to_parquet(opath, engine='pyarrow')
     else:
-        files = gh3.export_parts(gdf, opath).persist()
+        files = ih3.export_parts(gdf, opath).persist()
         progress(files)
         print('')
 

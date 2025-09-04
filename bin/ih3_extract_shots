@@ -36,7 +36,7 @@ def getCmdArgs():
     p.add_argument("-n", "--cores", dest="cores", required=False, type=int, default= n, help=f"number of cpu cores to use [default = {n}]")
     p.add_argument("-s", "--threads", dest="threads", required=False, type=int, default=1, help="number of threads per cpu [default = 1]")
     p.add_argument("-A", "--ram", dest="ram", required=False, type=int, default=20, help="maximum RAM usage per cpu - in Giga Bytes [default = 20]")
-    p.add_argument("-p", "--port", dest="port", required=False, type=int, default=30000, help="port where to open dask dashboard [default = 30000]")
+    p.add_argument("-p", "--port", dest="port", required=False, type=int, default=30000, help="port where to open dask dashboard [default = 8787]")
     cmdargs = p.parse_args()
     return cmdargs
 
@@ -201,8 +201,6 @@ if __name__ == '__main__':
     
     files = gh3.export_parts(gdf, opath, fmt=args.format).persist() 
     progress(files)  ## show the progress of files writing
-    print('')
-    
 
     #### if it contains 20 m product
     opath = re.sub('/*$', '', opath) ## remove last '/' if exists.
@@ -211,8 +209,7 @@ if __name__ == '__main__':
         files_list = glob.glob(opath + "/*." +  args.format)
         cmds = [gh3.merge_20m(file_path=f, q_20m = args.query_20m) for f in files_list]
         progress(dask.persist(*cmds))
-        print('') 
-        
+
     # merge at last
     if args.merge: # merge all parquet files.  # /path/filename
         print('## -- output to a single file')

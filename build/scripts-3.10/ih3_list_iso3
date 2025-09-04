@@ -1,0 +1,24 @@
+#!python
+import argparse
+
+def getCmdArgs():
+    p = argparse.ArgumentParser(description = "List iso3 country codes available in the postgres database")
+    p.add_argument("-g", "--grep", dest="grep", required=False, type=str, default=None, help="match substring in country names")
+    cmdargs = p.parse_args()
+    return cmdargs
+
+
+if __name__ == '__main__':
+    args = getCmdArgs()
+    
+    from icesatdriver import execute_query
+
+    q = "select iso3, name from fia.countries"
+   
+    if args.grep is not None:
+        q += f" where lower(name) like '%{args.grep.lower()}%'"
+        
+    q += " order by iso3"
+        
+    countries = execute_query(q, False)   
+    print(countries.to_markdown())

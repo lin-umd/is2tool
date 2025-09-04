@@ -1,0 +1,28 @@
+#!python
+import argparse
+import pandas as pd
+from icesath3 import list_icesat_variables, list_anci_variables
+
+def getCmdArgs():
+    p = argparse.ArgumentParser(description = "List variables available in the icesat H3 database")
+    p.add_argument("-a", "--ancillary", dest="ancillary", required=False, action='store_true', help="include variables from ancillary database")
+    p.add_argument("-g", "--grep", dest="grep", required=False, type=str, default=None, help="match substring")   
+    p.add_argument("-p", "--products", dest="products", required=False, type=str, nargs='+',  default=None, help="search only specified ICESat-2 [atl08]")
+    cmdargs = p.parse_args()
+    return cmdargs
+
+
+if __name__ == '__main__':
+    args = getCmdArgs()
+
+
+    vars = list_icesat_variables(args.grep)
+    
+    if args.ancillary:
+        anci = list_anci_variables(args.grep)
+        vars = pd.concat([vars, anci])
+        
+    if args.products is not None:
+       vars = vars[vars.index.isin(args.products)]
+   
+    print(vars.to_markdown())

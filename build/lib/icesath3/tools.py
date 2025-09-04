@@ -18,7 +18,6 @@ import multiprocessing
 from tqdm import tqdm
 import shutil
 
-#import easegridindex as egi  #### package folder ... 
 
 ROOT_PATH='/gpfs/data1/vclgp/xiongl/IS2global/data/h3/'
 
@@ -77,7 +76,7 @@ def list_anci_variables(keyword=None): ## landcover, nasa dem etc.
 @dask.delayed  # a function should be executed lazily as a Dask task
 def read_gpkg(path, cols):
     df = gpd.read_file(path, ignore_geometry=True) ##### read h3_12 ???
-    idcol = 'egi01' if 'egi01' in df.columns else 'h3_12'  
+    idcol = 'h3_12'  
     return df.set_index(idcol)[cols]
 
 def fix_geo_signs(g):
@@ -276,23 +275,14 @@ def h3_to_raster(xdf, res):
     return xras
 
 def raster_parts(df, nparts=1):
-    if df.index.name.startswith('egi'):
-        def rasterize(x):
-            idx = egi.egi_to_parent(x.copy(), 12).index.value_counts().idxmax()
-            xras = egi.geodf_to_raster(x)
-            for i in list(xras.data_vars):
-                xras[i] = xras[i].assign_attrs(egi12_id=idx)
-            return pd.Series(xras)
-    else:
-        nparts = df.npartitions if df.npartitions < nparts else nparts
-        xdf = df.head(npartitions=nparts)
-        h3lv = h3.h3_get_resolution(xdf.index[0])
-        res =  h3.edge_length(h3lv, 'm') * 2 # hex diameter in meters
-        utm = pyproj.database.query_utm_crs_info(xdf.crs.name, pyproj.aoi.AreaOfInterest(*xdf.total_bounds))[0]
-        xras = make_geocube(xdf.to_crs(epsg=utm.code), resolution=(-res,res)).rio.reproject('EPSG:4326')
-        xres, yres = xras.rio.resolution()
-        rasterize = lambda x: pd.Series(h3_to_raster(x, (yres, xres)))
-
+    nparts = df.npartitions if df.npartitions < nparts else nparts
+    xdf = df.head(npartitions=nparts)
+    h3lv = h3.h3_get_resolution(xdf.index[0])
+    res =  h3.edge_length(h3lv, 'm') * 2 # hex diameter in meters
+    utm = pyproj.database.query_utm_crs_info(xdf.crs.name, pyproj.aoi.AreaOfInterest(*xdf.total_bounds))[0]
+    xras = make_geocube(xdf.to_crs(epsg=utm.code), resolution=(-res,res)).rio.reproject('EPSG:4326')
+    xres, yres = xras.rio.resolution()
+    rasterize = lambda x: pd.Series(h3_to_raster(x, (yres, xres)))
     rasp = df.map_partitions(rasterize, meta=pd.Series(dtype=object))
     return rasp
 
@@ -312,11 +302,6 @@ def export_parts(df, out_dir, fmt=None):
             if 'h3_03_id' in ak:
                 basename = str(xdf.iloc[0].attrs['h3_03_id'])
                 attrs = {'h3_03_id':basename}
-            elif 'egi12_id' in ak:
-                basename= xdf.iloc[0].attrs['egi12_id']
-                attrs = {'egi12_id':basename}
-                basename = str(basename)
-            
             basename += '.tif' if fmt is None else f'.{fmt}'
             out_path = os.path.join(out_dir, basename)
             ras = xar.merge(xdf).assign_attrs(**attrs)
@@ -324,18 +309,7 @@ def export_parts(df, out_dir, fmt=None):
             return out_path
         #  first index.
         basename = xdf.index[0] ### what is base name here? h3_12 index: 8c82ab821da01ff
-        # print('base name is here: ')
-        # print(basename)
-        # sys.exit('check base name')
-
-
-
-        if type(basename) is str:
-            basename = h3.h3_to_parent(basename, 3) ### h3_03 index base name.
-        elif type(basename) is np.uint64:
-            basename = egi.egi_to_parent(xdf.copy(), 12).index.value_counts().idxmax()
-            basename = str(basename)
-
+        basename = h3.h3_to_parent(basename, 3) ### h3_03 index base name.
         if type(xdf) is gpd.GeoDataFrame:
             basename += '.gpkg' if fmt is None else f'.{fmt}'
             out_path = os.path.join(out_dir, basename)
@@ -344,7 +318,6 @@ def export_parts(df, out_dir, fmt=None):
             else:
                 xdf.to_file(out_path)
             return out_path
-    
         basename += '.parquet' if fmt is None else f'.{fmt}'
         out_path = os.path.join(out_dir, basename)
         ### I did not set format.
@@ -399,10 +372,7 @@ def get_anci_file(df, mapper={'quality_flags': ['quality_flag']}, merge_how='inn
     
     idx = df.index.name
     if idx == 'h3_12':
-        h3ids = [h3.h3_to_parent(df.index[0], 3)]
-    elif idx == 'egi01':
-        h3ids = list(df.set_index('h3_12').h3.h3_to_parent(3).h3_03.unique())
-    
+        h3ids = [h3.h3_to_parent(df.index[0], 3)]    
     cdf = []
     for h3id in h3ids:
         unmerged=True
@@ -462,7 +432,7 @@ def get_h3_20m(df, res=12, postfix='20m', lat_col='land_segments/latitude', lng_
     add = {f"h3_{res:02d}_{postfix}": tmp.index} ### h3_03 alreay added # , "h3_03": tmp.h3_03.values
     return df.assign(**add) # add h3_12_20m   colum. 
 
-
+@dask.delayed
 def merge_20m(file_path=None, q_20m = None):
     df = pd.read_parquet(file_path)
     if not df.columns.str.contains('001|002|003|004').any(): return

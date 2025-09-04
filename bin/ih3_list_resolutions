@@ -1,58 +1,84 @@
 #! python
 
 import argparse
-#from easegridindex import RESOLUTIONS
 import pandas as pd 
 
+# update table from https://h3geo.org/docs/3.x/core-library/restable/
+
+#km
 h3_edge_len = {
-    0:	1281.256011,
-    1:	483.0568391,
-    2:	182.5129565,
-    3:	68.97922179,
-    4:	26.07175968,
-    5:	9.854090990,
-    6:	3.724532667,
-    7:	1.406475763,
-    8:	0.531414010,
-    9:	0.200786148,
-    10:	0.075863783,
-    11:	0.028663897,
-    12:	0.010830188
+    0:	1107.712591,
+    1:	418.6760055,
+    2:	158.244655800,
+    3:	59.810857940,
+    4:	22.606379400,
+    5:	8.544408276	,
+    6:	3.229482772,
+    7:	1.220629759,
+    8:	0.461354684,
+    9:	0.174375668,
+    10:	0.065907807,
+    11:	0.024910561,
+    12: 0.009415526,
+    13: 0.003559893,
+    14: 0.001348575,
+    15: 0.000509713,
 }
-
+# km2
 h3_area = {
-    0:	4357449416078.392,
-    1:	609788441794.134,
-    2:	86801780398.997,
-    3:	12393434655.088,
-    4:	1770347654.491,
-    5:	252903858.182,
-    6:	36129062.164,
-    7:	5161293.360,
-    8:	737327.598,
-    9:	105332.513,
-    10:	15047.502,
-    11:	2149.643,
-    12:	307.092,
+    0:	4250546.8477000,
+    1:	607220.9782429,
+    2:	86745.8540347,
+    3:	12392.2648621,
+    4:	1770.3235517,
+    5:	252.9033645,
+    6:	36.1290521,
+    7:	5.1612932,
+    8:	0.7373276,
+    9:	0.1053325,
+    10:	0.0150475,
+    11:	0.0021496,
+    12:	0.0003071,
+    13: 0.0000439,
+    14: 0.0000063,
+    15: 0.0000009,
 }
 
+# N
+h3_number = {
+    0:	122,
+    1:	842,
+    2:	5882,
+    3:	41162,
+    4:	288122,
+    5:	2016842,
+    6:	14117882,
+    7:	98825162,
+    8:	691776122,
+    9:	4842432842,
+    10:	33897029882,
+    11:	237279209162,
+    12:	1660954464122,
+    13: 11626681248842,
+    14: 81386768741882,
+    15: 569707381193162,
+}
 def getCmdArgs():
     p = argparse.ArgumentParser(description = "List resolution specs for H3 spatial indexing systems")
     p.add_argument("-h3", "--h3", dest="h3", required=False, action='store_true', help="list H3 system only")
     cmdargs = p.parse_args()
     return cmdargs
-
-
 if __name__ == '__main__':
-    pd.set_option('display.float_format', lambda x: f'{x:.3f}')
     args = getCmdArgs()
-    
-    #if args.h3:
-    res_len = pd.DataFrame(h3_edge_len.items(), columns=['level','average edge length (m)']).set_index('level')
-    res_len *= 1000
-    res_area = pd.DataFrame(h3_area.items(), columns=['level','average area (m^2)']).set_index('level')
-    res = res_len.join(res_area)
-    print('## -- H3 levels - hexagons')
-    print(res)#.to_markdown())
-    print('')
+    pd.set_option('display.float_format', lambda x: f'{x:.3f}')
+    if args.h3:
+        res_len = pd.DataFrame(h3_edge_len.items(), columns=['level','average edge length (m)']).set_index('level')
+        res_len *= 1000
+        res_area = pd.DataFrame(h3_area.items(), columns=['level','average area (m^2)']).set_index('level')
+        res_area *= 1000000
+        res_number = pd.DataFrame(h3_number.items(), columns=['level','number of unique indexes']).set_index('level')
+        res = res_len.join(res_area).join(res_number)
+        print('## -- H3 levels - hexagons')
+        print(res)
+        print('')
     
