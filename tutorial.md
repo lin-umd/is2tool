@@ -265,7 +265,7 @@ optional arguments:
 Aggregate exported shots into vector [.gpkg] or raster [.tif] files at a given resolution. If rasterizing shots indexed with the H3 system, the output pixel size will be equivalent to the hexagons average diameter and their values will be resampled from overlapping hexagon centroids.
 
 ### Example:
-ih3_aggregate -i /gpfs/data1/vclgp/xiongl/tmp/is2_gabon -o /gpfs/data1/vclgp/xiongl/tmp/is2_gabon_r7 -m mean -r 7 -u land_segments/canopy/h_canopy
+`ih3_aggregate -i /gpfs/data1/vclgp/xiongl/tmp/is2_gabon -o /gpfs/data1/vclgp/xiongl/tmp/is2_gabon_r7 -m mean -r 7 -u land_segments/canopy/h_canopy`
 
 
 #
@@ -298,16 +298,16 @@ optional arguments:
   -d, --dropna          drop NAs before exporting
   -r, --resume          check for files in the output directory and ignore processing for existing files
   -n CORES, --cores CORES
-                        number of cpu cores to use [default = 32]
+                        number of cpu cores to use [default = 10]
   -s THREADS, --threads THREADS
                         number of threads per cpu [default = 1]
   -A RAM, --ram RAM     maximum RAM usage per cpu - in Giga Bytes [default = 20]
-  -p PORT, --port PORT  port where to open dask dashboard [default = 10000]
+  -p PORT, --port PORT  port where to open dask dashboard [default = 8787]
 ```
 
 Extract pixel information at ICESat_2 shot locations.
 
 ### Example:
 
-    `ih3_from_img -o /gpfs/data1/vclgp/xiongl/tmp/gabon -i /gpfs/data1/vclgp/xiongl/tmp/treecover2010_gabon.tif -b treecover2010`
+  `ih3_from_img -o /gpfs/data1/vclgp/xiongl/tmp/gabon -i /gpfs/data1/vclgp/xiongl/tmp/treecover2010_gabon.tif -b treecover2010`
 
